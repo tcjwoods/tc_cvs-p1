@@ -5,10 +5,12 @@ Script Intro
 
 # Imports
 import subprocess
+import os
 import sys
 import csv
 import math
 import pyodbc
+import sqlite3
 import pyqtgraph as pg
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMessageBox, QVBoxLayout
@@ -94,7 +96,9 @@ class CVS_Interface(QMainWindow):
                     self.base_envelope.append([ID, x, y, div])
                 line += 1
         # Scan Profiles
-        # TODO
+        self.profiles = []
+        self.profile_load_all()
+        self.current_profile = self.profiles[0]
 
         # Check Connection to CVS_AP
         self.myMQTT = mqtt()
@@ -114,11 +118,11 @@ class CVS_Interface(QMainWindow):
             self.myMQTT.subscribe("/data/SP")
         else:
             QMessageBox.information(self, "Connection Error!", "Not connected to device via CVS_AP. Reconnect and try again.")
-            self.close()
-            sys.exit()
+            #self.close()
+            #sys.exit()
 
         # Start with fresh profile
-        self.current_profile = Profile()
+        #self.current_profile = Profile()
 
         # Show window and populate data controls
         self.show()
@@ -201,8 +205,44 @@ class CVS_Interface(QMainWindow):
 
 # Profile Handle Functions
 
-    def profile_save(self):
+    def profile_load_all(self):
+        # Collects all profiles from SQL DB
+        try:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            query = "select * from profiles"
+            cursor.execute(query)
+            data = cursor.fetchall()
+            for row in data:
+                this_profile = Profile()
+                this_profile.bulk_data_upload(data)
+                self.profiles.append(this_profile)
+        except Exception as e:
+            print(e)
+
+
+    def profile_select(self):
+        # Activates selected profile
         pass
+
+    def profile_save(self):
+        try:
+            # Connect to DB
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
+            conn = sqlite3.connect(db_path)
+            # Create cursor and query
+            cursor = conn.cursor()
+            query = self.current_profile.generate_save_query("profiles")
+            # Execute Insert Query
+            cursor.execute(query)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(e)
+        finally:
+
+            print("profile saved.")
 
     def profile_create(self):
         pass
@@ -214,6 +254,9 @@ class CVS_Interface(QMainWindow):
         pass
 
     def profile_select(self):
+        pass
+
+    def profile_synchronize(self):
         pass
 
 # Data Visualization Functions
@@ -292,7 +335,23 @@ class CVS_Interface(QMainWindow):
 # Export Functions
 
 
+# Test Functions
+    def test_save_profile(self):
+        # Create profile and assign as current
+        self.current_profile = Profile()
+        self.current_profile.line = "TEST"
+        self.current_profile.track = "TEST"
+        self.current_profile.stationing = "TEST"
+        self.current_profile.SEA = 0.123
+        self.current_profile.REA = -4.394
+        self.current_profile.LEA = 179.209
+
+        self.profile_save()
+
 if __name__ == "__main__":
     this_app = QApplication(sys.argv)
     this_window = CVS_Interface(this_app)
     sys.exit(this_app.exec_())
+
+##### Testing Functions #####
+

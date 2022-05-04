@@ -4,11 +4,13 @@ Class Intro Here..
 
 from cmath import pi
 import math
+import time
 
 class Profile:
 
     def __init__(self):
         # Identification Fields
+        self.date = None
         self.line = None
         self.track = None
         self.stationing = None
@@ -42,10 +44,16 @@ class Profile:
             return None
             
     def centerExcess(self):
-        return 4374 / self.bendRadius()
+        if self.brAvailable():
+            return 4374 / self.bendRadius()
+        else:
+            return 0.00
 
     def endExcess(self):
-        return 2945 / self.bendRadius()
+        if self.brAvailable():
+            return 2945 / self.bendRadius()
+        else:
+            return 0.00
 
     def seAvailable(self):
         if self.SEA == None:
@@ -53,3 +61,50 @@ class Profile:
         if self.SEO == None:
             return False
         return True
+
+    def scan_string(self):
+        out_string = ""
+        if len(self.SP) > 0:
+            for point in self.SP:
+                if out_string != "":
+                    out_string += ", "
+                out_string += f"{point[0]}|{point[1]}"
+        else:
+            out_string = "None"
+        return out_string
+
+    def generate_save_query(self, table):
+        if self.date == None:
+            self.date = time.time()
+        this_query = f"insert into {table} (DATE, LINE, TRACK, STATIONING, LEA, REA, BR, CE, EE, SEA, SP)"
+        this_query += f" VALUES ('{self.date}', '{self.line}', '{self.track}', '{self.stationing}', {self.LEA}, {self.REA},"
+        this_query += f" {self.bendRadius()}, {self.centerExcess()}, {self.endExcess()}, {self.SEA}, '{self.scan_string()}');"
+        return this_query
+
+    def bulk_data_upload(self, data):
+        # Passes list of all data points, in same order as sql tables
+        data = data[0]
+        self.date = data[1]
+        self.line = data[2]
+        self.track = data[3]
+        self.stationing = data[4]
+        self.LEA = data[5]
+        self.REA = data[6]
+        self.SEA = data[10]
+        sp_string = ""
+        sp_string = data[11]
+        if sp_string != "None":
+            while sp_string != "":
+                if "," in sp_string:
+                    this_point = sp_string[0:sp_string.index(",")]
+                    sp_string = sp_string[sp_string.index(",")+1:]
+                else:
+                    this_point = sp_string
+                    sp_string = ""
+                br_index = this_point.index("|")
+                this_x = float(this_point[0:br_index])
+                this_y = float(this_point[br_index+1:])
+                self.SP.append([this_x, this_y])
+        else:
+            self.SP = []
+
