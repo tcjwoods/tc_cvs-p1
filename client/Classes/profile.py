@@ -5,6 +5,7 @@ Class Intro Here..
 from cmath import pi
 import math
 import time
+from sympy import symbols, Eq
 
 class Profile:
 
@@ -29,29 +30,50 @@ class Profile:
             return False
         return True
 
-    def bendRadius(self):
+    def bendRadius(self, inside):
         if (self.brAvailable()):
-            lx = 300 * math.cos(self.LEA * (pi / 180.0))
-            ly = 300 * math.sin(self.LEA * (pi / 180.0))
-            rx = 300 * math.cos(self.REA * (pi / 180.0))
-            ry = 300 * math.sin(self.REA * (pi / 180.0))
-            x, y, z = complex(0, 0), complex(lx, ly), complex(rx, ry)
-            w = z - x
-            w /= y - x
-            c = (x-y)*(w-abs(w)**2)/2j/w.imag-x
-            return abs(c+x) / 12.0
+            if inside:
+                lx = 300 * math.cos(self.LEA * (pi / 180.0))
+                ly = 300 * math.sin(self.LEA * (pi / 180.0))
+                rx = 300 * math.cos(self.REA * (pi / 180.0))
+                ry = 300 * math.sin(self.REA * (pi / 180.0))
+                x, y, z = complex(0, 0), complex(lx, ly), complex(rx, ry)
+                w = z - x
+                w /= y - x
+                c = (x-y)*(w-abs(w)**2)/2j/w.imag-x
+                return abs(c+x) / 12.0
+            else:
+                # !!!!!!!!NEED TO CONFIRM!!!!!!!!!
+                lx = 600 * math.cos(self.LEA * (pi / 180.0))
+                ly = 600 * math.sin(self.LEA * (pi / 180.0))
+                rx = 600 * math.cos(self.REA * (pi / 180.0))
+                ry = 600 * math.sin(self.REA * (pi / 180.0))
+                # Left Radius
+                l_slope = (ly / lx)
+                l_slope_perp = -1/l_slope
+                lcy = l_slope_perp * (0 - (lx/2)) + (ly/2)
+                lcx = 0
+                lbr = math.sqrt(lcx**2 + lcy**2)
+                # Right Radius
+                r_slope = (ry / rx)
+                r_slope_perp = -1 / r_slope
+                rcy = r_slope_perp * (0 - (rx/2)) + (ry/2)
+                rcx = 0
+                rbr = math.sqrt(rcx**2+rcy**2)
+                return [lbr, rbr] #min(lbr, rbr)
+                #!!!!!!!!!!NEED TO CONFIRM!!!!!!!!!!!!!
         else:
             return None
             
-    def centerExcess(self):
+    def centerExcess(self, inside):
         if self.brAvailable():
-            return 4374 / self.bendRadius()
+            return ((12 * (50**2))/8) / min(self.bendRadius(inside))
         else:
             return 0.00
 
-    def endExcess(self):
+    def endExcess(self, inside):
         if self.brAvailable():
-            return 2945 / self.bendRadius()
+            return 2945 / min(self.bendRadius(inside))
         else:
             return 0.00
 

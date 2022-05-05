@@ -12,6 +12,9 @@ import math
 import pyodbc
 import sqlite3
 import pyqtgraph as pg
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+import geopandas
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMessageBox, QVBoxLayout
 from Classes.profile import Profile
@@ -33,6 +36,7 @@ class CVS_Interface(QMainWindow):
         # Instance Variables
         self.current_profile = None # Current Profile to Store Data
         self.base_envelope = None # Envelope Coordinates prior to adjustment
+        self.adjusted_envelope = None # Envelope Coordinates of Adjusted Points
 
         # Initialize Controls
         self.btnSelectScan.clicked.connect(self.profile_select)
@@ -102,31 +106,35 @@ class CVS_Interface(QMainWindow):
 
         # Check Connection to CVS_AP
         self.myMQTT = mqtt()
-        wifi = subprocess.check_output(['iwgetid', '-r'])
-        data = wifi.decode('utf-8')
-        if ("CVS_AP" in data):
-            # Initialize MQTT
-            self.myMQTT = mqtt(self)
-            self.myMQTT.stateChanged.connect(self.mqtt_state_change)
-            self.myMQTT.messageSignal.connect(self.on_messageSignal)
-            self.myMQTT.hostname = "192.168.42.10"
-            self.myMQTT.connectToHost()
-            self.myMQTT.subscribe("/data/LEA")
-            self.myMQTT.subscribe("/data/REA")
-            self.myMQTT.subscribe("/data/SEA")
-            self.myMQTT.subscribe("/data/SEO")
-            self.myMQTT.subscribe("/data/SP")
-        else:
-            QMessageBox.information(self, "Connection Error!", "Not connected to device via CVS_AP. Reconnect and try again.")
-            #self.close()
-            #sys.exit()
-
-        # Start with fresh profile
-        #self.current_profile = Profile()
+        #wifi = subprocess.check_output(['iwgetid', '-r'])
+        #data = wifi.decode('utf-8')
+        #if ("CVS_AP" in data):
+        #    # Initialize MQTT
+        #    self.myMQTT = mqtt(self)
+        #    self.myMQTT.stateChanged.connect(self.mqtt_state_change)
+        #    self.myMQTT.messageSignal.connect(self.on_messageSignal)
+        #    self.myMQTT.hostname = "192.168.42.10"
+        #    self.myMQTT.connectToHost()
+        #    self.myMQTT.subscribe("/data/LEA")
+        #    self.myMQTT.subscribe("/data/REA")
+        #    self.myMQTT.subscribe("/data/SEA")
+        #    self.myMQTT.subscribe("/data/SEO")
+        #    self.myMQTT.subscribe("/data/SP")
+        #else:
+        #    QMessageBox.information(self, "Connection Error!", "Not connected to device via CVS_AP. Reconnect and try again.")
+        #    #self.close()
+        #    #sys.exit()
 
         # Show window and populate data controls
         self.show()
         self.data_update()
+
+        # !Testing!
+        test_flag = True
+        if test_flag:
+            self.test_clearance_calculations()
+            #self.test_br_outside()
+            #self.test_save_profile()
 
 # MQTT Functions
 
@@ -271,9 +279,10 @@ class CVS_Interface(QMainWindow):
         this_rea = self.current_profile.REA
         this_br, this_ce, this_ee = None, None, None
         if self.current_profile.brAvailable():
-            this_br = self.current_profile.bendRadius()
-            this_ce = self.current_profile.centerExcess()
-            this_ee = self.current_profile.endExcess()
+            inside = self.rbInside.isChecked()
+            this_br = self.current_profile.bendRadius(inside)
+            this_ce = self.current_profile.centerExcess(inside)
+            this_ee = self.current_profile.endExcess(inside)
         this_sea = self.current_profile.SEA
         this_seo = self.current_profile.SEO
         this_sp = len(self.current_profile.SP)
@@ -291,7 +300,7 @@ class CVS_Interface(QMainWindow):
             self.lstScanData.setItem(row, 1, QtWidgets.QTableWidgetItem(str(values[row])))
             self.lstScanData.item(row,1).setText(str(values[row]))
         # Update Scan Visualizer
-        adjusted_coordinates = []
+        self.adjusted_envelope = []
         for env_coord in self.base_envelope:
             if env_coord[3] == self.current_profile.envelope:
                 this_x = env_coord[1]
@@ -308,9 +317,9 @@ class CVS_Interface(QMainWindow):
                     else:
                         br_adj = self.current_profile.EE
                     this_x = this_x + br_adj
-                adjusted_coordinates.append([this_x, this_y])
+                self.adjusted_envelope.append([this_x, this_y])
         env_x, env_y = [], []
-        for p in adjusted_coordinates:
+        for p in self.adjusted_envelope:
             env_x.append(p[0])
             env_y.append(p[1])
         self.plot_envelope.clear()
@@ -329,6 +338,22 @@ class CVS_Interface(QMainWindow):
 
 # Data Validation Functions
 
+    def calculate_clearances(self):
+        envelope_polygon = Polygon(self.adjusted_envelope)
+        envelope_geo = geopandas.GeoSeries(envelope_polygon)
+
+        for point in self.current_profile.SP:
+            this_point = Point(point[0], point[1])
+            # Within Envelope Check
+            violation = envelope_polygon.contains(this_point)
+            # X Clearance
+            if not violation:
+                point_geo = geopandas.GeoSeries(this_point)
+                envelope_geo.boundary.distance(point_geo)
+                
+
+
+
     def scanpoint_is_violation(self, scan_point):
         return False
 
@@ -336,6 +361,33 @@ class CVS_Interface(QMainWindow):
 
 
 # Test Functions
+    def test_clearance_calculations(self):
+        # Confirmed to function properly
+        scanned_points = [[1,1], [2,2], [3,3], [4,4]]
+        envelope_points = [[2.5,2.5], [-2.5,2.5], [-2.5,-2.5], [2.5,-2.5]]
+
+        polygon = Polygon(envelope_points)
+        geo_series = geopandas.GeoSeries(polygon)
+        for point in scanned_points:
+            this_point = Point(point[0], point[1])
+            violation = polygon.contains(this_point)
+            geo_point = geopandas.GeoSeries(this_point)
+            this_distance = geo_series.distance(geo_point)
+            print(point)
+            print(f"Is Violation: {violation}")
+            print(f"Distance to Envelope: {this_distance}\n")
+
+
+    def test_br_outside(self):
+        self.current_profile = Profile()
+        self.current_profile.line = "TEST"
+        self.current_profile.track = "TEST"
+        self.current_profile.stationing = "TEST"
+        self.current_profile.REA = 4.90 # 4.9 from tangent OC
+        self.current_profile.LEA = 173.8 # 6.2 from tangent OC
+        br = self.current_profile.bendRadius(False)
+        print(br)
+
     def test_save_profile(self):
         # Create profile and assign as current
         self.current_profile = Profile()
