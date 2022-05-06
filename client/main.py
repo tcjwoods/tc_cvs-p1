@@ -6,6 +6,7 @@ Script Intro
 # Imports
 import subprocess
 import os
+import PyQt5
 import sys
 import csv
 import math
@@ -15,14 +16,44 @@ import pyqtgraph as pg
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 import geopandas
-from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import QApplication, QMainWindow, QHeaderView, QMessageBox, QVBoxLayout
+from PyQt5 import QtWidgets, QtCore, QtGui, uic
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from Classes.profile import Profile
 from Classes.mqtt import mqttClient as mqtt
 
+##### Table Model Class ##### (Move to own file)
+
+class MyTableModel(QAbstractTableModel):
+    def __init__(self, parent, mylist, header, *args):
+        QAbstractTableModel.__init__(self, parent, *args)
+        self.mylist = mylist
+        self.header = header
+
+    def rowCount(self, parent):
+        return len(self.mylist)
+
+    def columnCount(self, parent):
+        return len(self.mylist[0])
+
+    def data(self, index, role):
+        if not index.isValid():
+            return None
+        elif role != Qt.DisplayRole:
+            return None
+        return self.mylist[index.row()][index.column()]
+
+    def headerData(self, col, orientation, role):
+        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            return self.header[col]
+        return None
 
 ##### Interface Class #####
 class CVS_Interface(QMainWindow):
+
+    def closeEvent(self, QCloseEvent):
+        print("Closing now..")
 
 # Class Init
     def __init__(self, app, parent=None):
@@ -85,6 +116,10 @@ class CVS_Interface(QMainWindow):
         self.plotter_layout = QVBoxLayout()
         self.plotter_layout.addWidget(self.plotter)
         self.grpVisual.setLayout(self.plotter_layout)
+
+        # Initialize Profile Selection Table
+        self.table_profiles_headers = ['ID', 'Line', 'Track', 'Stationing', 'Timestamp']
+
         # Initialize Background Data
         # Envelope Data
         self.base_envelope = []
@@ -102,7 +137,10 @@ class CVS_Interface(QMainWindow):
         # Scan Profiles
         self.profiles = []
         self.profile_load_all()
-        self.current_profile = self.profiles[0]
+        if len(self.profiles) > 0:
+            self.current_profile = self.profiles[0]
+        else:
+            self.current_profile = Profile()
 
         # Check Connection to CVS_AP
         self.myMQTT = mqtt()
@@ -130,11 +168,13 @@ class CVS_Interface(QMainWindow):
         self.data_update()
 
         # !Testing!
-        test_flag = True
+        test_flag = False
         if test_flag:
-            self.test_clearance_calculations()
+            #self.test_profile_update()
+            #self.test_clearance_calculations()
             #self.test_br_outside()
             #self.test_save_profile()
+            pass
 
 # MQTT Functions
 
@@ -216,53 +256,110 @@ class CVS_Interface(QMainWindow):
     def profile_load_all(self):
         # Collects all profiles from SQL DB
         try:
+            # Retrieve profiles from DB
             db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             query = "select * from profiles"
             cursor.execute(query)
             data = cursor.fetchall()
+            table_data = []
+            self.profiles = []
             for row in data:
                 this_profile = Profile()
-                this_profile.bulk_data_upload(data)
+                this_profile.bulk_data_upload(row)
                 self.profiles.append(this_profile)
+                table_data.append([this_profile.ID,
+                                   this_profile.line,
+                                   this_profile.track,
+                                   this_profile.stationing,
+                                   this_profile.date])
+            # Add profiles to table view
+            table_model = MyTableModel(self, table_data, self.table_profiles_headers)
+            self.lstProfiles.setModel(table_model)
         except Exception as e:
             print(e)
 
 
     def profile_select(self):
         # Activates selected profile
-        pass
+        indexes = self.lstProfiles.selectionModel().selectedRows()
+        for index in indexes:
+            this_index = index.row()
+            self.current_profile = self.profiles[this_index]
+        print(f"Selected profile with ID = {self.current_profile.ID}")
+        self.data_update()
+        self.plot_scanpoints()
+
+    def profile_create(self):
+        self.current_profile = Profile()
+        self.data_update()
+        self.plot_scanpoints()
+        self.lstProfiles.clearSelection()
+        QMessageBox.information(self, "Create Scan", "A new profile was created. You may begin capturing data now.")
 
     def profile_save(self):
         try:
+            if self.current_profile.line is None:
+                ok = False
+                while not ok:
+                    response, ok = QInputDialog.getText(self, "Missing Information", "Enter Train Line/Yard:")
+                self.current_profile.line = response
+            if self.current_profile.track is None:
+                ok = False
+                while not ok:
+                    response, ok = QInputDialog.getText(self, "Missing Information", "Enter Track Number:")
+                self.current_profile.track = response
+            if self.current_profile.stationing is None:
+                ok = False
+                while not ok:
+                    response, ok = QInputDialog.getText(self, "Missing Information", "Enter Stationing:")
+                self.current_profile.stationing = response
+            table = "profiles"
             # Connect to DB
             db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
             conn = sqlite3.connect(db_path)
-            # Create cursor and query
             cursor = conn.cursor()
-            query = self.current_profile.generate_save_query("profiles")
-            # Execute Insert Query
-            cursor.execute(query)
+            # Check if Existing
+            select_query = f"select * from profiles where " \
+                           f"DATE='{self.current_profile.date}';"
+            cursor.execute(select_query)
+            select_results = cursor.fetchall()
+            save_query = None
+            if len(select_results) > 0:
+                # Found a match, update instead of insert
+                save_query = self.current_profile.generate_update_query(table)
+            else:
+                # Did not find, so insert instead of update
+                save_query = self.current_profile.generate_insert_query(table)
+            # Execute save query
+            cursor.execute(save_query[0], save_query[1])
             conn.commit()
             conn.close()
+            self.profile_load_all()
+            self.data_update()
+            print("Profile saved successfully.")
         except Exception as e:
             print(e)
-        finally:
-
-            print("profile saved.")
-
-    def profile_create(self):
-        pass
-
-    def profile_update(self):
-        pass
 
     def profile_delete(self):
-        pass
+        indexes = self.lstProfiles.selectionModel().selectedRows()
+        delete_index = None
+        for index in indexes:
+            delete_index = index.row()
+        response = QMessageBox.information(self, "Confirm Deletion", f"Are you sure you would like to delete the selected scan (ID = {self.profiles[delete_index].ID})?", QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel)
+        if response == QMessageBox.Yes:
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM profiles WHERE ID=?", [self.profiles[delete_index].ID])
+            conn.commit()
+            conn.close()
+            QMessageBox.information(self, "Delete Successful", "The profile was successfully deleted.")
+            self.profile_load_all()
+        else:
+            QMessageBox.information(self, "Delete Aborted", "The profile was NOT deleted.")
 
-    def profile_select(self):
-        pass
 
     def profile_synchronize(self):
         pass
@@ -272,21 +369,25 @@ class CVS_Interface(QMainWindow):
     def data_update(self):
         # Clear Data Table
         headers = ["Parameter", "Value"]
-        params = ["LEA", "REA", "BR", "CE", "EE", "SEA", "SEO", "SP"]
+        params = ["ID", "LINE", "TRACK", "STATIONING", "LEA", "REA", "BR", "CE", "EE", "SEA", "SEO", "SP"]
         self.lstScanData.clearSpans()
         # Get New Data
+        this_id = self.current_profile.ID
+        this_line = self.current_profile.line
+        this_track = self.current_profile.track
+        this_stationing = self.current_profile.stationing
         this_lea = self.current_profile.LEA
         this_rea = self.current_profile.REA
         this_br, this_ce, this_ee = None, None, None
         if self.current_profile.brAvailable():
             inside = self.rbInside.isChecked()
-            this_br = self.current_profile.bendRadius(inside)
-            this_ce = self.current_profile.centerExcess(inside)
-            this_ee = self.current_profile.endExcess(inside)
+            this_br = self.current_profile.bendRadius()
+            this_ce = self.current_profile.centerExcess()
+            this_ee = self.current_profile.endExcess()
         this_sea = self.current_profile.SEA
         this_seo = self.current_profile.SEO
         this_sp = len(self.current_profile.SP)
-        values = [this_lea, this_rea, this_br, this_ce, this_ee, this_sea, this_seo, this_sp]
+        values = [this_id, this_line, this_track, this_stationing, this_lea, this_rea, this_br, this_ce, this_ee, this_sea, this_seo, this_sp]
         # Populate Table
         self.lstScanData.setRowCount(len(params))
         self.lstScanData.setColumnCount(len(headers))
@@ -305,7 +406,7 @@ class CVS_Interface(QMainWindow):
             if env_coord[3] == self.current_profile.envelope:
                 this_x = env_coord[1]
                 this_y = env_coord[2]
-                if self.current_profile.SEA != None:
+                if not self.current_profile.SEA is None:
                     vect_rad = math.sqrt(this_x**2 + this_y**2)
                     vect_ang = (math.atan2(this_y, this_x) * (180.0 / math.pi)) + self.current_profile.SEA
                     this_x = vect_rad * math.cos(vect_ang * (math.pi / 180.0))
@@ -361,6 +462,23 @@ class CVS_Interface(QMainWindow):
 
 
 # Test Functions
+    def test_profile_update(self):
+        # Create NEW profile and save
+        self.current_profile = Profile()
+        self.current_profile.line = "TEST"
+        self.current_profile.track = "TEST"
+        self.current_profile.stationing = "TEST"
+        self.current_profile.REA = 0.00
+        self.current_profile.LEA = 180.00
+        self.current_profile.SEA = 0.00
+        self.current_profile.inside = True
+        self.profile_save()
+        # Modfiy profile and update
+        self.current_profile.REA = 6.00
+        self.current_profile.LEA = 174.00
+        self.current_profile.SEA = 0.50
+        self.profile_save()
+
     def test_clearance_calculations(self):
         # Confirmed to function properly
         scanned_points = [[1,1], [2,2], [3,3], [4,4]]

@@ -36,26 +36,6 @@
     <property name="alignment">
      <set>Qt::AlignCenter</set>
     </property>
-    <widget class="QRadioButton" name="rbInside">
-     <property name="geometry">
-      <rect>
-       <x>320</x>
-       <y>70</y>
-       <width>161</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Inside of Curve</string>
-     </property>
-    </widget>
     <widget class="QLabel" name="_lblEnvelopePrompt">
      <property name="geometry">
       <rect>
@@ -79,30 +59,10 @@
       <set>Qt::AlignCenter</set>
      </property>
     </widget>
-    <widget class="QRadioButton" name="rbOutside">
-     <property name="geometry">
-      <rect>
-       <x>320</x>
-       <y>100</y>
-       <width>161</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Outside of Curve</string>
-     </property>
-    </widget>
     <widget class="QLabel" name="_lblCurvePrompt">
      <property name="geometry">
       <rect>
-       <x>270</x>
+       <x>330</x>
        <y>40</y>
        <width>241</width>
        <height>20</height>
@@ -145,76 +105,13 @@
       <set>Qt::AlignCenter</set>
      </property>
     </widget>
-    <widget class="QLabel" name="_lblResolutionPrompt">
-     <property name="geometry">
-      <rect>
-       <x>500</x>
-       <y>40</y>
-       <width>191</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-       <weight>75</weight>
-       <bold>true</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>Scan Resolution</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
-    </widget>
-    <widget class="QComboBox" name="cmbScanResolution">
-     <property name="geometry">
-      <rect>
-       <x>520</x>
-       <y>70</y>
-       <width>121</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-    </widget>
-    <widget class="QLabel" name="_lblResolutionUnits">
-     <property name="geometry">
-      <rect>
-       <x>638</x>
-       <y>70</y>
-       <width>41</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-       <weight>50</weight>
-       <bold>false</bold>
-      </font>
-     </property>
-     <property name="text">
-      <string>°/pt</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
-    </widget>
     <widget class="QFrame" name="frmDivision">
      <property name="geometry">
       <rect>
        <x>30</x>
-       <y>70</y>
+       <y>80</y>
        <width>251</width>
-       <height>71</height>
+       <height>41</height>
       </rect>
      </property>
      <property name="frameShape">
@@ -246,51 +143,11 @@
        <string>A Division</string>
       </property>
      </widget>
-     <widget class="QRadioButton" name="rbCD">
+     <widget class="QRadioButton" name="rbBD">
       <property name="geometry">
        <rect>
         <x>130</x>
         <y>10</y>
-        <width>101</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>10</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>C Division</string>
-      </property>
-     </widget>
-     <widget class="QRadioButton" name="rbDD">
-      <property name="geometry">
-       <rect>
-        <x>130</x>
-        <y>40</y>
-        <width>101</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>10</pointsize>
-        <weight>50</weight>
-        <bold>false</bold>
-       </font>
-      </property>
-      <property name="text">
-       <string>D Division</string>
-      </property>
-     </widget>
-     <widget class="QRadioButton" name="rbBD">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>40</y>
         <width>101</width>
         <height>20</height>
        </rect>
@@ -446,6 +303,65 @@
      <property name="text">
       <string>Toggle Motor</string>
      </property>
+    </widget>
+    <widget class="QFrame" name="frmCurve">
+     <property name="geometry">
+      <rect>
+       <x>310</x>
+       <y>80</y>
+       <width>341</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <property name="lineWidth">
+      <number>0</number>
+     </property>
+     <widget class="QRadioButton" name="rbOutside">
+      <property name="geometry">
+       <rect>
+        <x>190</x>
+        <y>10</y>
+        <width>141</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+        <weight>50</weight>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Outside of Curve</string>
+      </property>
+     </widget>
+     <widget class="QRadioButton" name="rbInside">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>10</y>
+        <width>141</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>10</pointsize>
+        <weight>50</weight>
+        <bold>false</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>Inside of Curve</string>
+      </property>
+     </widget>
     </widget>
    </widget>
    <widget class="QGroupBox" name="grpScanData">
@@ -680,13 +596,13 @@
       <string>Delete Scan</string>
      </property>
     </widget>
-    <widget class="QTableWidget" name="lstScans">
+    <widget class="QTableView" name="lstProfiles">
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>40</y>
-       <width>381</width>
-       <height>321</height>
+       <y>30</y>
+       <width>391</width>
+       <height>331</height>
       </rect>
      </property>
      <property name="font">
@@ -696,33 +612,12 @@
        <bold>false</bold>
       </font>
      </property>
-     <property name="sizeAdjustPolicy">
-      <enum>QAbstractScrollArea::AdjustToContents</enum>
-     </property>
      <property name="selectionMode">
       <enum>QAbstractItemView::SingleSelection</enum>
      </property>
      <property name="selectionBehavior">
       <enum>QAbstractItemView::SelectRows</enum>
      </property>
-     <attribute name="horizontalHeaderCascadingSectionResizes">
-      <bool>true</bool>
-     </attribute>
-     <attribute name="horizontalHeaderMinimumSectionSize">
-      <number>30</number>
-     </attribute>
-     <attribute name="horizontalHeaderDefaultSectionSize">
-      <number>60</number>
-     </attribute>
-     <attribute name="horizontalHeaderShowSortIndicator" stdset="0">
-      <bool>true</bool>
-     </attribute>
-     <attribute name="verticalHeaderVisible">
-      <bool>false</bool>
-     </attribute>
-     <attribute name="verticalHeaderCascadingSectionResizes">
-      <bool>true</bool>
-     </attribute>
     </widget>
    </widget>
    <widget class="QGroupBox" name="grpVisual">
@@ -755,7 +650,7 @@
      <x>0</x>
      <y>0</y>
      <width>1479</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
