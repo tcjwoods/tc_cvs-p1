@@ -81,6 +81,10 @@ class CVS_Interface(QMainWindow):
         self.btnSP.clicked.connect(self.ETSP)
         self.btnTL.clicked.connect(self.ETTL)
         self.btnTM.clicked.connect(self.ETTM)
+        self.rbAD.clicked.connect(self.envelope_change)
+        self.rbBD.clicked.connect(self.envelope_change)
+        self.rbInside.clicked.connect(self.envelope_change)
+        self.rbOutside.clicked.connect(self.envelope_change)
 
         # Response Dictionary
         self.response_dict = {
@@ -141,6 +145,10 @@ class CVS_Interface(QMainWindow):
             self.current_profile = self.profiles[0]
         else:
             self.current_profile = Profile()
+        # Set Curve to Inside by Default
+        self.rbInside.setChecked(True)
+        # Set Envelope to A Division by Default
+        self.rbAD.setChecked(True)
 
         # Check Connection to CVS_AP
         self.myMQTT = mqtt()
@@ -166,6 +174,7 @@ class CVS_Interface(QMainWindow):
         # Show window and populate data controls
         self.show()
         self.data_update()
+        self.plot_scanpoints()
 
         # !Testing!
         test_flag = False
@@ -218,14 +227,17 @@ class CVS_Interface(QMainWindow):
         self.myMQTT.publish("command", "ETTM")
 
     def envelope_change(self):
+        # Envelope Division
         if self.rbAD.isChecked():
             self.current_profile.envelope = "A Division"
         elif self.rbBD.isChecked():
             self.current_profile.envelope = "B Division"
-        elif self.rbCD.isChecked():
-            self.current_profile.envelope = "C Division"
-        elif self.rbDD.isChecked():
-            self.current_profile.envelope = "D Division"
+        # Inside/Outside Curve
+        if self.rbInside.isChecked():
+            self.current_profile.inside = True
+        else:
+            self.current_profile.inside = False
+        self.data_update()
 
 
 # Data Handle Functions
@@ -279,7 +291,6 @@ class CVS_Interface(QMainWindow):
             self.lstProfiles.setModel(table_model)
         except Exception as e:
             print(e)
-
 
     def profile_select(self):
         # Activates selected profile
@@ -367,9 +378,43 @@ class CVS_Interface(QMainWindow):
 # Data Visualization Functions
 
     def data_update(self):
+        # Update Scan Visualizer
+        self.adjusted_envelope = []
+        this_BRAvailable = self.current_profile.brAvailable()
+        this_CE = self.current_profile.centerExcess()
+        this_BR = self.current_profile.bendRadius()
+        this_EE = self.current_profile.endExcess()
+        this_inside = self.rbInside.isChecked()
+        if self.rbAD.isChecked():
+            desired_division = "A Division"
+        else:
+            desired_division = "B Division"
+        for env_coord in self.base_envelope:
+            if env_coord[3] == desired_division:
+                this_x = env_coord[1]
+                this_y = env_coord[2]
+                if not self.current_profile.SEA is None:
+                    vect_rad = math.sqrt(this_x**2 + this_y**2)
+                    vect_ang = (math.atan2(this_y, this_x) * (180.0 / math.pi)) + self.current_profile.SEA
+                    this_x = vect_rad * math.cos(vect_ang * (math.pi / 180.0))
+                    this_y = vect_rad * math.sin(vect_ang * (math.pi / 180.0))
+                if this_BRAvailable:
+                    br_adj = 0.00
+                    if this_inside:
+                        br_adj = this_CE
+                    else:
+                        br_adj = this_EE
+                    this_x = this_x + br_adj
+                self.adjusted_envelope.append([this_x, this_y])
+        env_x, env_y = [], []
+        for p in self.adjusted_envelope:
+            env_x.append(p[0])
+            env_y.append(p[1])
+        self.plot_envelope.clear()
+        self.plot_envelope.setData(x=env_x, y=env_y)
         # Clear Data Table
         headers = ["Parameter", "Value"]
-        params = ["ID", "LINE", "TRACK", "STATIONING", "LEA", "REA", "BR", "CE", "EE", "SEA", "SEO", "SP"]
+        params = ["ID", "LINE", "TRACK", "STATIONING", "LEA", "REA", "BR", "CE", "EE", "SEA", "SEO", "SP", "SP Violation", "Min Clearance"]
         self.lstScanData.clearSpans()
         # Get New Data
         this_id = self.current_profile.ID
@@ -379,6 +424,18 @@ class CVS_Interface(QMainWindow):
         this_lea = self.current_profile.LEA
         this_rea = self.current_profile.REA
         this_br, this_ce, this_ee = None, None, None
+        these_clearances = self.calculate_clearances()
+        min_clearance = 99999.99
+        this_violation = False
+        for clearance in these_clearances:
+            if clearance[0]:
+                this_violation = True
+                min_clearance = 0.00
+            else:
+                if clearance[1] < min_clearance:
+                    min_clearance = clearance[1]
+        if min_clearance == 99999.99:
+            min_clearance = 0.00
         if self.current_profile.brAvailable():
             inside = self.rbInside.isChecked()
             this_br = self.current_profile.bendRadius()
@@ -387,7 +444,7 @@ class CVS_Interface(QMainWindow):
         this_sea = self.current_profile.SEA
         this_seo = self.current_profile.SEO
         this_sp = len(self.current_profile.SP)
-        values = [this_id, this_line, this_track, this_stationing, this_lea, this_rea, this_br, this_ce, this_ee, this_sea, this_seo, this_sp]
+        values = [this_id, this_line, this_track, this_stationing, this_lea, this_rea, this_br, this_ce, this_ee, this_sea, this_seo, this_sp, this_violation, min_clearance]
         # Populate Table
         self.lstScanData.setRowCount(len(params))
         self.lstScanData.setColumnCount(len(headers))
@@ -400,31 +457,6 @@ class CVS_Interface(QMainWindow):
             self.lstScanData.item(row, 0).setText(str(params[row]))
             self.lstScanData.setItem(row, 1, QtWidgets.QTableWidgetItem(str(values[row])))
             self.lstScanData.item(row,1).setText(str(values[row]))
-        # Update Scan Visualizer
-        self.adjusted_envelope = []
-        for env_coord in self.base_envelope:
-            if env_coord[3] == self.current_profile.envelope:
-                this_x = env_coord[1]
-                this_y = env_coord[2]
-                if not self.current_profile.SEA is None:
-                    vect_rad = math.sqrt(this_x**2 + this_y**2)
-                    vect_ang = (math.atan2(this_y, this_x) * (180.0 / math.pi)) + self.current_profile.SEA
-                    this_x = vect_rad * math.cos(vect_ang * (math.pi / 180.0))
-                    this_y = vect_rad * math.sin(vect_ang * (math.pi / 180.0))
-                if self.current_profile.brAvailable():
-                    br_adj = 0.00
-                    if self.rbInside.isChecked():
-                        br_adj = self.current_profile.CE
-                    else:
-                        br_adj = self.current_profile.EE
-                    this_x = this_x + br_adj
-                self.adjusted_envelope.append([this_x, this_y])
-        env_x, env_y = [], []
-        for p in self.adjusted_envelope:
-            env_x.append(p[0])
-            env_y.append(p[1])
-        self.plot_envelope.clear()
-        self.plot_envelope.setData(x=env_x, y=env_y)
 
     def plot_scanpoints(self):
         self.plot_scan.clear()
@@ -440,17 +472,24 @@ class CVS_Interface(QMainWindow):
 # Data Validation Functions
 
     def calculate_clearances(self):
+        clearances = []
         envelope_polygon = Polygon(self.adjusted_envelope)
         envelope_geo = geopandas.GeoSeries(envelope_polygon)
 
         for point in self.current_profile.SP:
+            this_distance = None
+            this_violation = None
             this_point = Point(point[0], point[1])
             # Within Envelope Check
-            violation = envelope_polygon.contains(this_point)
+            this_violation = envelope_polygon.contains(this_point)
             # X Clearance
-            if not violation:
+            if not this_violation:
                 point_geo = geopandas.GeoSeries(this_point)
-                envelope_geo.boundary.distance(point_geo)
+                this_distance = envelope_geo.boundary.distance(point_geo)
+            clearances.append([this_violation, this_distance])
+
+        return clearances
+
                 
 
 

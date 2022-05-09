@@ -118,7 +118,7 @@ def console_init():
     print("Script Name: '/home/pi/Desktop/cvs_data_manager/main.py")
     print("Script Version: 1.0")
     print("Last Update: n/a\n")
-True    
+
 # Calibration Initialization
 def calib_init():
     global _calibration_values
