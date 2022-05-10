@@ -5,6 +5,7 @@ Class Intro Here..
 from cmath import pi
 import math
 import time
+import datetime
 from PyQt5.QtWidgets import QInputDialog
 from sympy import symbols, Eq
 
@@ -18,6 +19,7 @@ class Profile:
         self.line = None
         self.track = None
         self.stationing = None
+        self.equipment = None
         # Data Fields
         self.LEA = None
         self.REA = None
@@ -147,3 +149,8 @@ class Profile:
                 self.SP.append([this_x, this_y])
         else:
             self.SP = []
+
+    def get_timestamp(self):
+        timestamp = datetime.datetime.fromtimestamp(float(self.date))
+        timestamp = timestamp[0:timestamp.index(" ")]
+        return timestamp

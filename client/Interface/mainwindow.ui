@@ -657,14 +657,22 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionNew_Scan"/>
+    <widget class="QMenu" name="menuExport_Scan_s">
+     <property name="title">
+      <string>Export Scan(s)</string>
+     </property>
+     <addaction name="actClearanceReport"/>
+     <addaction name="actClearanceScan"/>
+     <addaction name="actDataTable"/>
+     <addaction name="actScanPoints"/>
+    </widget>
+    <addaction name="actNewScan"/>
     <addaction name="separator"/>
-    <addaction name="actionImport_Scans"/>
+    <addaction name="actSaveScan"/>
     <addaction name="separator"/>
-    <addaction name="actionSave_Scan"/>
-    <addaction name="actionSave_Scan_as"/>
+    <addaction name="menuExport_Scan_s"/>
     <addaction name="separator"/>
-    <addaction name="actionExport_Scan_s"/>
+    <addaction name="actionUpload_to_Cloud"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
@@ -849,7 +857,7 @@
     <string>Reconnect</string>
    </property>
   </action>
-  <action name="actionNew_Scan">
+  <action name="actNewScan">
    <property name="text">
     <string>New Scan</string>
    </property>
@@ -859,7 +867,7 @@
     <string>Import Scans</string>
    </property>
   </action>
-  <action name="actionSave_Scan">
+  <action name="actSaveScan">
    <property name="text">
     <string>Save Scan</string>
    </property>
@@ -869,9 +877,29 @@
     <string>Save Scan as</string>
    </property>
   </action>
-  <action name="actionExport_Scan_s">
+  <action name="actionUpload_to_Cloud">
    <property name="text">
-    <string>Export Scan(s)</string>
+    <string>Upload to Cloud</string>
+   </property>
+  </action>
+  <action name="actClearanceReport">
+   <property name="text">
+    <string>Clearance Report (PDF)</string>
+   </property>
+  </action>
+  <action name="actClearanceScan">
+   <property name="text">
+    <string>Clearance Scan (JPG)</string>
+   </property>
+  </action>
+  <action name="actDataTable">
+   <property name="text">
+    <string>Data Table (CSV)</string>
+   </property>
+  </action>
+  <action name="actScanPoints">
+   <property name="text">
+    <string>Scan Points (CSV)</string>
    </property>
   </action>
  </widget>

@@ -6,48 +6,28 @@ Script Intro
 # Imports
 import subprocess
 import os
+import requests
 import PyQt5
 import sys
 import csv
 import math
+import time
 import pyodbc
 import sqlite3
 import pyqtgraph as pg
+import pyqtgraph.exporters
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 import geopandas
+from fillpdf import fillpdfs
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from Classes.profile import Profile
 from Classes.mqtt import mqttClient as mqtt
-
-##### Table Model Class ##### (Move to own file)
-
-class MyTableModel(QAbstractTableModel):
-    def __init__(self, parent, mylist, header, *args):
-        QAbstractTableModel.__init__(self, parent, *args)
-        self.mylist = mylist
-        self.header = header
-
-    def rowCount(self, parent):
-        return len(self.mylist)
-
-    def columnCount(self, parent):
-        return len(self.mylist[0])
-
-    def data(self, index, role):
-        if not index.isValid():
-            return None
-        elif role != Qt.DisplayRole:
-            return None
-        return self.mylist[index.row()][index.column()]
-
-    def headerData(self, col, orientation, role):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
-            return self.header[col]
-        return None
+from Classes.tableModel import MyTableModel
+import pdfrw
 
 ##### Interface Class #####
 class CVS_Interface(QMainWindow):
@@ -85,6 +65,13 @@ class CVS_Interface(QMainWindow):
         self.rbBD.clicked.connect(self.envelope_change)
         self.rbInside.clicked.connect(self.envelope_change)
         self.rbOutside.clicked.connect(self.envelope_change)
+        self.actNewScan.triggered.connect(self.profile_create)
+        self.actSaveScan.triggered.connect(self.profile_save)
+        self.actClearanceReport.triggered.connect(self.export_report)
+        self.actClearanceScan.triggered.connect(self.export_scan)
+        self.actDataTable.triggered.connect(self.export_data)
+        self.actScanPoints.triggered.connect(self.export_scan_data)
+        self.lstProfiles.doubleClicked.connect(self.profile_select)
 
         # Response Dictionary
         self.response_dict = {
@@ -150,26 +137,44 @@ class CVS_Interface(QMainWindow):
         # Set Envelope to A Division by Default
         self.rbAD.setChecked(True)
 
-        # Check Connection to CVS_AP
+        # Check Current Connections
+        self.device_connection = False
+        self.internet_connection = False
+        # Connection to Device
         self.myMQTT = mqtt()
-        #wifi = subprocess.check_output(['iwgetid', '-r'])
-        #data = wifi.decode('utf-8')
-        #if ("CVS_AP" in data):
-        #    # Initialize MQTT
-        #    self.myMQTT = mqtt(self)
-        #    self.myMQTT.stateChanged.connect(self.mqtt_state_change)
-        #    self.myMQTT.messageSignal.connect(self.on_messageSignal)
-        #    self.myMQTT.hostname = "192.168.42.10"
-        #    self.myMQTT.connectToHost()
-        #    self.myMQTT.subscribe("/data/LEA")
-        #    self.myMQTT.subscribe("/data/REA")
-        #    self.myMQTT.subscribe("/data/SEA")
-        #    self.myMQTT.subscribe("/data/SEO")
-        #    self.myMQTT.subscribe("/data/SP")
-        #else:
-        #    QMessageBox.information(self, "Connection Error!", "Not connected to device via CVS_AP. Reconnect and try again.")
-        #    #self.close()
-        #    #sys.exit()
+        wifi = subprocess.check_output(['iwgetid', '-r'])
+        data = wifi.decode('utf-8')
+        if ("CVS_AP" in data):
+            # Initialize MQTT
+            self.myMQTT = mqtt(self)
+            self.myMQTT.stateChanged.connect(self.mqtt_state_change)
+            self.myMQTT.messageSignal.connect(self.on_messageSignal)
+            self.myMQTT.hostname = "192.168.42.10"
+            self.myMQTT.connectToHost()
+            self.myMQTT.subscribe("/data/LEA")
+            self.myMQTT.subscribe("/data/REA")
+            self.myMQTT.subscribe("/data/SEA")
+            self.myMQTT.subscribe("/data/SEO")
+            self.myMQTT.subscribe("/data/SP")
+            self.device_connection = True
+        else:
+            self.device_connection = False
+            QMessageBox.information(self, "Connection Error!", "Not connected to device via CVS_AP. You will not be"
+                                                               "able to perform clearance measurements until connected"
+                                                               " to CVS_AP.")
+            #self.close()
+            #sys.exit()
+        # Connection to Internet
+        url = "https://www.google.com"
+        try:
+            request = requests.get(url, timeout=5)
+            self.internet_connection = True
+            QMessageBox.information(self, "Internet Connection!", "You are currently connected to the internet. Cloud "
+                                                                  "upload features have been enabled.")
+        except Exception as e:
+            self.internet_connection = False
+            QMessageBox.information(self, "Internet Connection!", "You are not connected to the internet. Cloud "
+                                                                  "upload features have been disabled.")
 
         # Show window and populate data controls
         self.show()
@@ -262,6 +267,34 @@ class CVS_Interface(QMainWindow):
             this_x = float(value[0:value.index("|")])
             this_y = float(value[value.index("|")+1:])
             self.current_profile.SP.append([this_x, this_y])
+
+# Clearance Calculation Functions
+
+    def calculate_clearances(self):
+        clearances = []
+        envelope_polygon = Polygon(self.adjusted_envelope)
+        envelope_geo = geopandas.GeoSeries(envelope_polygon)
+
+        for point in self.current_profile.SP:
+            this_distance = None
+            this_violation = None
+            this_point = Point(point[0], point[1])
+            # Within Envelope Check
+            this_violation = envelope_polygon.contains(this_point)
+            # X Clearance
+            if not this_violation:
+                point_geo = geopandas.GeoSeries(this_point)
+                this_distance = envelope_geo.boundary.distance(point_geo)
+            else:
+                this_distance = 0.00
+            clearances.append([this_violation, this_distance])
+        return clearances
+
+    def scanpoint_is_violation(self, scan_point):
+        envelope_polygon = Polygon(self.adjusted_envelope)
+        envelope_geo = geopandas.GeoSeries(envelope_polygon)
+        this_point = Point(scan_point[0], scan_point[1])
+        return envelope_polygon.contains(this_point)
 
 # Profile Handle Functions
 
@@ -469,36 +502,121 @@ class CVS_Interface(QMainWindow):
                 vio_y.append(scan_point[1])
         self.plot_violation.setData(x=vio_x, y=vio_y)
 
-# Data Validation Functions
-
-    def calculate_clearances(self):
-        clearances = []
-        envelope_polygon = Polygon(self.adjusted_envelope)
-        envelope_geo = geopandas.GeoSeries(envelope_polygon)
-
-        for point in self.current_profile.SP:
-            this_distance = None
-            this_violation = None
-            this_point = Point(point[0], point[1])
-            # Within Envelope Check
-            this_violation = envelope_polygon.contains(this_point)
-            # X Clearance
-            if not this_violation:
-                point_geo = geopandas.GeoSeries(this_point)
-                this_distance = envelope_geo.boundary.distance(point_geo)
-            clearances.append([this_violation, this_distance])
-
-        return clearances
-
-                
-
-
-
-    def scanpoint_is_violation(self, scan_point):
-        return False
-
 # Export Functions
 
+    def export_report(self):
+        # Exports data as "Clearance Verification Report" PDF
+        data_dict = fillpdfs.get_form_fields('Resources/cvs_report_template.pdf')
+        print(data_dict)
+        # Assign data to dictionary for filling
+        violation_flag = False
+        min_clearance = 9999.99
+        for p in self.calculate_clearances():
+            if p[0]:
+                violation_flag = True
+            if p[1] < min_clearance:
+                min_clearance = p[1]
+        if min_clearance == 9999.99:
+            min_clearance = "N/a"
+        # Retrieve Visualized JPG
+        filename = 'cvs_visual_export_' + str(time.time()) + '.jpg'
+        exporter = pg.exporters.ImageExporter(self.plotter)
+        exporter.export(f'Temp/{filename}]')
+        # Compile Data for Report
+        data_dict = {
+            'frmLine': self.current_profile.line,
+            'frmTrack': self.current_profile.track,
+            'frmStationing': self.current_profile.stationing,
+            'frmEquipment': self.current_profile.equipment,
+            'frmResolution': f"{len(self.current_profile.SP)} Points",
+            'frmDate': self.current_profile.date,
+            'frmInside': self.current_profile.inside,
+            'frmSuper': f"{self.current_profile.SEA} deg.",
+            'frmRadius': f"{self.current_profile.bendRadius()} ft.",
+            'frmCenter': f"{self.current_profile.centerExcess()} in.",
+            'frmEnd': f"{self.current_profile.endExcess()} in.",
+            'frmClearance': f"{min_clearance} in."
+        }
+        print(data_dict)
+        # Save and Flatten PDF
+        new_file_name = f"CVS Report-{self.current_profile.line}-{self.current_profile.track}-" \
+                        f"{self.current_profile.date}.pdf"
+        file, check = QFileDialog.getSaveFileName(None, "Save Report As..", "", "PDF Files (*.pdf);;All Files (*)")
+        if ".pdf" not in file:
+            file += '.pdf'
+        fillpdfs.write_fillable_pdf(r"Resources/cvs_report_template.pdf", file, data_dict, flatten=True)
+        fillpdfs.flatten_pdf(file, file)
+        # Clean up temp files
+        os.remove(f'Temp/{filename}')
+        print("Export of Clearance Report completed.\n")
+
+    def export_data(self):
+        # !!!!! Need to Test !!!!! #
+        # Exports data as a table of relevant clearance information as CSV
+        file, check = QFileDialog.getSaveFileName(None, "Save Data Table As..", "", "CSV Files (*.csv);;All Files (*)")
+        violations = False
+        min_clearance = 9999.99
+        for p in self.calculate_clearances():
+            if p[0]:
+                violations = True
+            if p[1] < min_clearance:
+                min_clearance = p[1]
+        with open(f"{file}.csv", newline='') as export_file:
+            writer = csv.writer(export_file, delimiter=',')
+            export_data = [["Line/Location:", self.current_profile.line],
+                           ["Track:", self.current_profile.track],
+                           ["Stationing:", self.current_profile.stationing],
+                           ["Equipment:", self.current_profile.equipment],
+                           ["Capture Date::", self.current_profile.get_timestamp()],
+                           ["Inside of Curve:", self.current_profile.inside],
+                           ["Left Encoder Angle", self.current_profile.LEA],
+                           ["Right Encoder Angle:", self.current_profile.REA],
+                           ["Bend Radius:", self.current_profile.bendRadius()],
+                           ["Center Excess:", self.current_profile.centerExcess()],
+                           ["End Excess:", self.current_profile.endExcess()],
+                           ["Super Elevation Angle:", self.current_profile.SEA],
+                           ["Total Scan Points:", len(self.current_profile.SP)],
+                           ["Contains Violations:", violations],
+                           ["Minimum Clearance:", min_clearance]]
+            for line in export_data:
+                writer.writerow(line)
+        print("Export of Clearance Data completed.\n")
+
+    def export_scan(self):
+        # !!!!! Need to Test !!!!! #
+        # Exports visualized scan as JPG
+        filename, check = QFileDialog.getSaveFileName(None, "Save Scan Export As..", "", "JPG Files (*.jpg);;"
+                                                                                         "All Files (*)")
+        if ".jpg" not in filename:
+            filename += ".jpg"
+        exporter = pg.exporters.ImageExporter(self.plotter)
+        exporter.export(filename)
+        print("Export of Visualized Scan completed.\n")
+
+    def export_scan_data(self):
+        # !!!!! Need to Test !!!!! #
+        # Exports scan points as CSV
+        filename, check = QFileDialog.getSaveFileName(None, "Save Scan Data As..", "", "CSV Files (*.csv);;"
+                                                                                       "All Files (*)")
+        if ".csv" not in filename:
+            filename += ".csv"
+        header_data = [
+            ["Track/Location:", self.current_profile.track],
+            ["Line:", self.current_profile.line],
+            ["Stationing:", self.current_profile.stationing],
+            ["Equipment:", self.current_profile.equipment],
+            ["Date:", self.current_profile.get_timestamp()],
+            ["Total Scan Points:", len(self.current_profile.SP)],
+            ["Scan Points:", ""],
+            ["SP X Coordinate", "SP Y Coordinate"]
+        ]
+        with open(filename) as export_file:
+            writer = csv.writer(export_file)
+            for line in header_data:
+                writer.writerow(line)
+            for sp in self.current_profile.SP:
+                writer.writerow(sp)
+        print("Export of Scan Data completed.\n")
 
 # Test Functions
     def test_profile_update(self):
