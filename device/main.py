@@ -14,12 +14,16 @@ import os, time, math, serial, smbus, board, spidev, signal
 import gpiozero as gpio
 import RPi.GPIO as GPIO
 import matplotlib.pyplot as plt
-import tfmplus as tfmP
-from tfmplus import *
+import Dependencies.tfmp.tfmplus as tfmP
+from Dependencies.tfmp.tfmplus import *
 import paho.mqtt.client as mqtt
 import csv
 from Dependencies.encoder import Encoder
 import signal
+
+# Tracking Variables
+timeout_counter = 0
+success_counter = 0
 
 # Pin Definitions
 MPU_SDA = 2
@@ -218,9 +222,14 @@ def sm_init():
     
 # Function to handle TFM Capture Timeout
 def handler(signum, frame):
-    print("Function timed out.")
+    global timeout_counter
+    timeout_counter += 1
+    print("Distance capture timed out.")
     raise TimeOutException()
-signal.signal(signal.SIGALRM, handler)
+
+
+signal.signal(signal.SIGVTALRM, handler)
+
 
 def hs_is_found():
     sensor_state = GPIO.input(HS_IN)
@@ -228,6 +237,7 @@ def hs_is_found():
         return True
     else:
         return False
+
 
 def enc_retrieve(as_angle):
     # Flush SPI Buffer
@@ -278,7 +288,7 @@ def mpu_retrieve(axis):
     ang_z = math.atan2(-acc_y, -acc_x) * (180.00 / math.pi)
     ang_z += z_calib
     if ang_z > 180:
-        ang_z = - (360 - z_ang)
+        ang_z = - (360 - ang_z)
     ang_z += 180.00
     if axis == "Z":
         return ang_z
@@ -306,17 +316,49 @@ def sm_determine_resolution(as_angle):
         return [ms0, ms1, ms2]
     
 def tfm_capture_distance():
-    global dist
-    if (tfmP.getData()):
-        return tfmP.dist/2.52
-    else:
-        return 0.00
+    this_distance = None
+    attempt_count = 0
+    while this_distance is None:
+        attempt_count += 1
+        try:
+            #signal.setitimer(signal.ITIMER_VIRTUAL, 1.0)
+            if tfmP.getData():
+                this_distance = tfmP.dist / 2.52
+            else:
+                this_distance = None
+        except TimeOutException as e_TOE:
+            this_distance = None
+        finally:
+            pass
+            #signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+        if attempt_count >= 9:
+            print("Failed to capture distance in time..")
+            return 0.00
+    return this_distance
+
+
+def tfm_capture_distance_rapid():
+    this_dist = None
+    attempt_counter = 0
+    signal.setitimer(signal.ITIMER_VIRTUAL, 1.0)
+    try:
+        if tfmP.getData():
+            this_dist = tfmP.dist / 2.54
+            signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+        else:
+            this_dist = 0.00
+            signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+    except TimeOutException as e_to:
+        this_dist = 0.00
+        signal.setitimer(signal.ITIMER_VIRTUAL, 0)
+    return this_dist
+
 
 def sm_step():
     GPIO.output(SM_STEP, GPIO.HIGH)
-    time.sleep(0.01)
+    time.sleep(0.005)
     GPIO.output(SM_STEP, GPIO.LOW)
-    time.sleep(0.01)
+    time.sleep(0.005)
 
 def sm_set_resolution(pin_combination):
     GPIO.output(SM_M0, pin_combination[0])
@@ -363,27 +405,42 @@ def SE(unused_parameter):
     myMQTT.publish("/data/SEA", str(this_SEA))
     myMQTT.publish("/data/SEO", str(this_SEO))
 
+def SP_RAPID(unused_parameter):
+    CYCLES = 10
+    # Rotates rapidly for 10 cycles, with very low timeout for distance
+    sm_set_resolution([1, 1, 0])
+    current_resolution = 0.225
+    steps = int((CYCLES * 360.0) / current_resolution)
+    print(f"Executing {CYCLES} scan cycles, with {steps} total steps..\n")
+    for step_counter in range(0, steps):
+        # Capture Distance
+        this_dist = tfm_capture_distance_rapid()
+        # Step Once
+        sm_step()
+        # Perform Calculations
+        this_angle = (step_counter * current_resolution) - 90.0
+        this_x = this_dist * math.cos(this_angle * (math.pi / 180.0))
+        this_y = this_dist * math.sin(this_angle * (math.pi / 180.0))
+        print(f"SP:{step_counter+1}|{this_x}|{this_y}\n")
+        myMQTT.publish("/data/SP", f"{this_x}|{this_y}")
+    print("Scan completed.\n")
+    myMQTT.publish("/data/SP", "SP:1")
+
 def SP(unused_parameter):
-    True# Verify Motor is Home
+    start_time = time.time()
+    # Verify Motor is Home
     #HM(None)
     # Set Resolution to 0.225
     sm_set_resolution([1, 1, 0])
     current_resolution = 0.225
     # Determine number of measurements to make
-    #current_resolution = float(sm_determine_resolution(True))
+    # current_resolution = float(sm_determine_resolution(True))
     steps = 360 / float(current_resolution)
     # Perform Scan
     print(f"Executing Scan: {steps} points")
     for step_counter in range(0, int(steps)):
         # Capture Distance
-        signal.alarm(1)
-        this_distance = 0.00
-        try:
-            this_distance = tfm_capture_distance()
-        except TimeOutException as ex:
-             this_distance = 0.00
-        finally:
-            signal.alarm(0)
+        this_distance = tfm_capture_distance_rapid()
         # Step Motor
         sm_step()
         # Calculate Cortesian Equivalent to Vector
@@ -395,7 +452,14 @@ def SP(unused_parameter):
         # Publish to MQTT Channel
         print(f"SP:{step_counter+1}|{this_x}|{this_y}\n")
         myMQTT.publish("/data/SP", f"{this_x}|{this_y}")
-    print(f"Scan Completed.\n")
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"Scan Completed.")
+    print(f"Total Points: {steps}")
+    print(f"Capture Success Rate: {(steps - timeout_counter) / steps}%")
+    print(f"Timed Out Captures: {timeout_counter}")
+    print(f"Scan Duration: {duration}")
+    print(f"Avg Time/Point: {duration/steps}\n")
     # Re-Home Motor
     #HM()
     # Publish Complete Flag to MQTT Channel
@@ -455,7 +519,7 @@ command_dict = {"ERLE": LE,
                 "ERSE": SE,
                 "ETHM": HM,
                 "ETSR": SR,
-                "ETSP": SP,
+                "ETSP": SP_RAPID,
                 "ETTL": TL,
                 "ETTM": TM}
 def primary_loop():

@@ -15,44 +15,38 @@ class TF02:
         self.check = None
         self.i = None
 
-        self.serial1 = serial.Serial()
-        self.serial1.port = "/dev/serial0"
-        self.serial1.baudrate = 115200
-        self.serial1.open()
-
-        #self.__loop__()
+        self.serial = serial.Serial('/dev/serial0', baudrate=115200)
 
     def __loop__(self):
-        if self.serial1.in_waiting > 0:
-            if self.serial1.read() == self._HEADER:
-                if self.serial1.read() == self._HEADER:
-                    self.a = self.serial1.read()
-                    self.b = self.serial1.read()
-                    self.c = self.serial1.read()
-                    self.d = self.serial1.read()
-                    self.e = self.serial1.read()
-                    self.f = self.serial1.read()
+        if self.serial.in_waiting > 0:
+            if self.serial.read() == self._HEADER:
+                if self.serial.read() == self._HEADER:
+                    self.a = self.serial.read()
+                    self.b = self.serial.read()
+                    self.c = self.serial.read()
+                    self.d = self.serial.read()
+                    self.e = self.serial.read()
+                    self.f = self.serial.read()
                     self.check = sum(self.a, self.b, self.c, self.d, self.e, self.f, self._HEADER, self._HEADER)
                     if self.serial1.read() == (self.check & 0xff):
                         self.DISTANCE = (self.a + (self.b * 256))
                         self.STRENGTH = (self.c + (self.d * 256))
 
     def getDistance(self):
-
-        self.serial1.flushInput()
+        self.serial.flushInput()
         exit_flag = False
         exit_counter = 0
-        while self.serial1.in_waiting > 0:
-            if self.serial1.read() == self._HEADER:
-                if self.serial1.read() == self._HEADER:
-                    self.a = self.serial1.read()
-                    self.b = self.serial1.read()
-                    self.c = self.serial1.read()
-                    self.d = self.serial1.read()
-                    self.e = self.serial1.read()
-                    self.f = self.serial1.read()
+        while self.serial.in_waiting > 0:
+            if self.serial.read() == self._HEADER:
+                if self.serial.read() == self._HEADER:
+                    self.a = self.serial.read()
+                    self.b = self.serial.read()
+                    self.c = self.serial.read()
+                    self.d = self.serial.read()
+                    self.e = self.serial.read()
+                    self.f = self.serial.read()
                     self.check = sum([self.a, self.b, self.c, self.d, self.e, self.f, self._HEADER, self._HEADER])
-                    if self.serial1.read() == (self.check & 0xff):
+                    if self.serial.read() == (self.check & 0xff):
                         self.DISTANCE = (self.a + (self.b * 256))
                         self.STRENGTH = (self.c + (self.d * 256))
                         return self.DISTANCE

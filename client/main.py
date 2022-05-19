@@ -103,7 +103,11 @@ class CVS_Interface(QMainWindow):
         self.plotter.addItem(self.plot_envelope)
         self.plot_scan = pg.ScatterPlotItem(size=5, pen=pg.mkPen(255, 255, 255, 120), connected=True, symbol='o') # White
         self.plotter.addItem(self.plot_scan)
-        self.plot_violation = pg.ScatterPlotItem(size=5, pen=pg.mkPen(255, 0, 0, 120), connected=False, symbol='x') # Red
+        self.plot_violation = pg.ScatterPlotItem(size=5, pen=pg.mkPen(255, 0, 0, 120), brush='r',
+                                                 connected=False, symbol='x', symbolPen='r') # Red
+        self.plot_violation.setBrush('r')
+        self.plot_violation.setSymbol('x')
+        self.plotter.addItem(self.plot_violation)
         self.plotter_layout = QVBoxLayout()
         self.plotter_layout.addWidget(self.plotter)
         self.grpVisual.setLayout(self.plotter_layout)
@@ -167,7 +171,7 @@ class CVS_Interface(QMainWindow):
         # Connection to Internet
         url = "https://www.google.com"
         try:
-            request = requests.get(url, timeout=5)
+            request = requests.get(url, timeout=1)
             self.internet_connection = True
             QMessageBox.information(self, "Internet Connection!", "You are currently connected to the internet. Cloud "
                                                                   "upload features have been enabled.")
@@ -200,8 +204,13 @@ class CVS_Interface(QMainWindow):
         val = msg[msg.index("|")+1:]
         this_function = self.response_dict[top]
         this_function(val)
-        self.data_update()
-
+        if top in ["SEA", "SEO", "LEA", "REA"]:
+            self.data_update()
+        else:
+            if len(self.current_profile.SP) % 50 == 0:
+                self.plot_scanpoints()
+        if top == "SP" and val == "1":
+            self.data_update()
 
 # Control Functions
     
@@ -264,8 +273,10 @@ class CVS_Interface(QMainWindow):
             # Scan Complete Flag
             self.plot_scanpoints()
         else:
-            this_x = float(value[0:value.index("|")])
-            this_y = float(value[value.index("|")+1:])
+            x_offset = 0.00
+            y_offset = 10.375
+            this_x = float(value[0:value.index("|")]) + x_offset
+            this_y = float(value[value.index("|")+1:]) + y_offset
             self.current_profile.SP.append([this_x, this_y])
 
 # Clearance Calculation Functions
@@ -284,7 +295,8 @@ class CVS_Interface(QMainWindow):
             # X Clearance
             if not this_violation:
                 point_geo = geopandas.GeoSeries(this_point)
-                this_distance = envelope_geo.boundary.distance(point_geo)
+                this_distance = envelope_geo.boundary.distance(point_geo)[0]
+                print(this_distance)
             else:
                 this_distance = 0.00
             clearances.append([this_violation, this_distance])
@@ -496,10 +508,12 @@ class CVS_Interface(QMainWindow):
         self.plot_violation.clear()
         vio_x, vio_y = [], []
         for scan_point in self.current_profile.SP:
-            self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
+            #self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
             if self.scanpoint_is_violation(scan_point):
                 vio_x.append(scan_point[0])
                 vio_y.append(scan_point[1])
+            else:
+                self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
         self.plot_violation.setData(x=vio_x, y=vio_y)
 
 # Export Functions
