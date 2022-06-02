@@ -672,7 +672,7 @@
     <addaction name="separator"/>
     <addaction name="menuExport_Scan_s"/>
     <addaction name="separator"/>
-    <addaction name="actionUpload_to_Cloud"/>
+    <addaction name="actCloudUpload"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
     <property name="title">
@@ -877,7 +877,7 @@
     <string>Save Scan as</string>
    </property>
   </action>
-  <action name="actionUpload_to_Cloud">
+  <action name="actCloudUpload">
    <property name="text">
     <string>Upload to Cloud</string>
    </property>

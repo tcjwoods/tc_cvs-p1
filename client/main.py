@@ -19,6 +19,8 @@ import pyqtgraph.exporters
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 import geopandas
+import mysql.connector
+from mysql.connector import errorcode
 from fillpdf import fillpdfs
 from PyQt5 import QtWidgets, QtCore, QtGui, uic
 from PyQt5.QtWidgets import *
@@ -72,6 +74,7 @@ class CVS_Interface(QMainWindow):
         self.actDataTable.triggered.connect(self.export_data)
         self.actScanPoints.triggered.connect(self.export_scan_data)
         self.lstProfiles.doubleClicked.connect(self.profile_select)
+        self.actCloudUpload.triggered.connect(self.profile_cloud)
 
         # Response Dictionary
         self.response_dict = {
@@ -92,6 +95,7 @@ class CVS_Interface(QMainWindow):
 
         # Initialize Plotter
         self.plotter = pg.plot()
+        self.imv = pg.ImageView()
         self.plotter.showGrid(x=True, y=True)
         self.plotter.setXRange(-250, 250)
         self.plotter.setYRange(-50, 250)
@@ -313,7 +317,7 @@ class CVS_Interface(QMainWindow):
     def profile_load_all(self):
         # Collects all profiles from SQL DB
         try:
-            # Retrieve profiles from DB
+            # Retrieve profiles from Local DB
             db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), r"Resources/cvs_local.db")
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
@@ -323,6 +327,7 @@ class CVS_Interface(QMainWindow):
             table_data = []
             self.profiles = []
             for row in data:
+                print(row)
                 this_profile = Profile()
                 this_profile.bulk_data_upload(row)
                 self.profiles.append(this_profile)
@@ -417,8 +422,111 @@ class CVS_Interface(QMainWindow):
             QMessageBox.information(self, "Delete Aborted", "The profile was NOT deleted.")
 
 
-    def profile_synchronize(self):
-        pass
+    def profile_cloud(self):
+
+        local_path = r"Resources/cvs_local.db"
+        # Retrieve current state of local db
+        local_conn = sqlite3.connect(local_path)
+        local_cursor = local_conn.cursor()
+        local_cursor.execute("SELECT * FROM Profiles")
+        local_results = local_cursor.fetchall()
+        for profile in self.profiles:
+            found = False
+            changes = False
+            # Find matching profile from db
+            for db_profile in local_results:
+                this_date = db_profile[1]
+                if this_date == profile.date:
+                    found = True
+                    if not profile.line == db_profile[2]:
+                        changes = True
+                    if not profile.track == db_profile[3]:
+                        changes = True
+                    if not profile.stationing == db_profile[4]:
+                        changes = True
+                    if not profile.LEA == db_profile[5]:
+                        changes = True
+                    if not profile.REA == db_profile[6]:
+                        changes = True
+                    if not profile.bendRadius() == db_profile[7]:
+                        changes = True
+                    if not profile.centerExcess() == db_profile[8]:
+                        changes = True
+                    if not profile.endExcess() == db_profile[9]:
+                        changes = True
+                    if not profile.SEA == db_profile[10]:
+                        changes = True
+                    if not profile.scan_string() == db_profile[11]:
+                        changes = True
+                    if changes:
+                        # Push changes to local DB
+                        query = profile.generate_update_query("Profiles")
+                        local_cursor.execute(query[0], query[1])
+                    break
+            if not found:
+                query = profile.generate_insert_query("Profiles")
+                local_cursor.execute(query[0], query[1])
+        local_conn.commit()
+        local_cursor.close()
+        local_conn.close()
+
+        # Cloud DB Changes
+        if self.internet_connection:
+            # Retrieve current state of cloud db
+            config = {
+                'server': 'sql-cvs-dev-eastus.database.windows.net',
+                'database': 'db-cvs-dev-eastus',
+                'username': 'tcjwoods',
+                'password': 'Clearance1!'
+            }
+            conn_string = "Driver={ODBC Driver 17 for SQL Server};Server=tcp:sql-cvs-dev-eastus.database.windows.net," \
+                          "1433;Database=db-cvs-dev-eastus;Uid=tcjwoods;Pwd=Clearance1!;Encrypt=yes;" \
+                          "TrustServerCertificate=no;Connection Timeout=30;"
+            cloud_conn = pyodbc.connect(conn_string)
+
+            cloud_cursor = cloud_conn.cursor()
+            query = "SELECT * FROM Profiles"
+            cloud_cursor.execute(query)
+            cloud_results = cloud_cursor.fetchall()
+            for profile in self.profiles:
+                found = False
+                changes = False
+                for db_profile in cloud_results:
+                    this_date = db_profile[1]
+                    if this_date == profile.date:
+                        found = True
+                        if not profile.line == db_profile[2]:
+                            changes = True
+                        if not profile.track == db_profile[3]:
+                            changes = True
+                        if not profile.stationing == db_profile[4]:
+                            changes = True
+                        if not profile.LEA == db_profile[5]:
+                            changes = True
+                        if not profile.REA == db_profile[6]:
+                            changes = True
+                        if not profile.bendRadius() == db_profile[7]:
+                            changes = True
+                        if not profile.centerExcess() == db_profile[8]:
+                            changes = True
+                        if not profile.endExcess() == db_profile[9]:
+                            changes = True
+                        if not profile.SEA == db_profile[10]:
+                            changes = True
+                        if not profile.scan_string() == db_profile[11]:
+                            changes = True
+                        if changes:
+                            # Push changes to local DB
+                            query = profile.generate_update_query("Profiles")
+                            cloud_cursor.execute(query[0], query[1])
+                        break
+                if not found:
+                    query = profile.generate_insert_query("Profiles")
+                    cloud_cursor.execute(query[0], query[1])
+            cloud_conn.commit()
+            cloud_cursor.close()
+            cloud_conn.close()
+
 
 # Data Visualization Functions
 
@@ -508,19 +616,21 @@ class CVS_Interface(QMainWindow):
         self.plot_violation.clear()
         vio_x, vio_y = [], []
         for scan_point in self.current_profile.SP:
-            #self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
-            if self.scanpoint_is_violation(scan_point):
-                vio_x.append(scan_point[0])
-                vio_y.append(scan_point[1])
-            else:
-                self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
+            if not (scan_point[0] == 0.0) and not (scan_point[1] == 0.0):
+                #self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
+                if self.scanpoint_is_violation(scan_point):
+                    vio_x.append(scan_point[0])
+                    vio_y.append(scan_point[1])
+                else:
+                    self.plot_scan.addPoints([scan_point[0]], [scan_point[1]])
         self.plot_violation.setData(x=vio_x, y=vio_y)
 
 # Export Functions
 
     def export_report(self):
         # Exports data as "Clearance Verification Report" PDF
-        data_dict = fillpdfs.get_form_fields('Resources/cvs_report_template.pdf')
+        input_file = 'Resources/report_template.pdf'
+        data_dict = fillpdfs.get_form_fields(input_file)
         print(data_dict)
         # Assign data to dictionary for filling
         violation_flag = False
@@ -533,41 +643,51 @@ class CVS_Interface(QMainWindow):
         if min_clearance == 9999.99:
             min_clearance = "N/a"
         # Retrieve Visualized JPG
-        filename = 'cvs_visual_export_' + str(time.time()) + '.jpg'
-        exporter = pg.exporters.ImageExporter(self.plotter)
-        exporter.export(f'Temp/{filename}]')
+        plot_file = 'Temp/cvs_visual_export_' + str(time.time()) + '.jpg'
+        #with open(filename, 'w'):
+            # Create file
+        #    pass
+        #self.imv.export(filename)
+        exporter = pg.exporters.ImageExporter(self.plotter.sceneObj)
+        exporter.export(plot_file)
         # Compile Data for Report
         data_dict = {
             'frmLine': self.current_profile.line,
             'frmTrack': self.current_profile.track,
             'frmStationing': self.current_profile.stationing,
             'frmEquipment': self.current_profile.equipment,
-            'frmResolution': f"{len(self.current_profile.SP)} Points",
-            'frmDate': self.current_profile.date,
+            'frmDate': self.current_profile.date_string(),
+            'frmPerformed': "",  # TODO Add this field to creation of scan
             'frmInside': self.current_profile.inside,
             'frmSuper': f"{self.current_profile.SEA} deg.",
-            'frmRadius': f"{self.current_profile.bendRadius()} ft.",
+            'frmBend': f"{self.current_profile.bendRadius()} ft.",
             'frmCenter': f"{self.current_profile.centerExcess()} in.",
             'frmEnd': f"{self.current_profile.endExcess()} in.",
             'frmClearance': f"{min_clearance} in."
         }
         print(data_dict)
         # Save and Flatten PDF
-        new_file_name = f"CVS Report-{self.current_profile.line}-{self.current_profile.track}-" \
-                        f"{self.current_profile.date}.pdf"
-        file, check = QFileDialog.getSaveFileName(None, "Save Report As..", "", "PDF Files (*.pdf);;All Files (*)")
-        if ".pdf" not in file:
-            file += '.pdf'
-        fillpdfs.write_fillable_pdf(r"Resources/cvs_report_template.pdf", file, data_dict, flatten=True)
-        fillpdfs.flatten_pdf(file, file)
+        output_file, check = QFileDialog.getSaveFileName(None, "Save Report As..", "", "PDF Files (*.pdf);;All Files (*)")
+        if ".pdf" not in output_file:
+            output_file += '.pdf'
+        temp_file = output_file[0:-4] + "_temp.pdf"
+        fillpdfs.write_fillable_pdf(input_file, temp_file, data_dict, flatten=True)
+        fillpdfs.place_image(plot_file, 15, 250, temp_file, output_file, 1, width=565, height=315)
+
         # Clean up temp files
-        os.remove(f'Temp/{filename}')
+        try:
+            os.remove(plot_file)
+            os.remove(temp_file)
+        except:
+            pass
         print("Export of Clearance Report completed.\n")
 
     def export_data(self):
         # !!!!! Need to Test !!!!! #
         # Exports data as a table of relevant clearance information as CSV
         file, check = QFileDialog.getSaveFileName(None, "Save Data Table As..", "", "CSV Files (*.csv);;All Files (*)")
+        if not ".csv" in file:
+            file = file + ".csv"
         violations = False
         min_clearance = 9999.99
         for p in self.calculate_clearances():
@@ -575,13 +695,13 @@ class CVS_Interface(QMainWindow):
                 violations = True
             if p[1] < min_clearance:
                 min_clearance = p[1]
-        with open(f"{file}.csv", newline='') as export_file:
+        with open(file, newline='\n', mode='w') as export_file:
             writer = csv.writer(export_file, delimiter=',')
             export_data = [["Line/Location:", self.current_profile.line],
                            ["Track:", self.current_profile.track],
                            ["Stationing:", self.current_profile.stationing],
                            ["Equipment:", self.current_profile.equipment],
-                           ["Capture Date::", self.current_profile.get_timestamp()],
+                           ["Capture Date:", self.current_profile.date_string()],
                            ["Inside of Curve:", self.current_profile.inside],
                            ["Left Encoder Angle", self.current_profile.LEA],
                            ["Right Encoder Angle:", self.current_profile.REA],
@@ -593,6 +713,7 @@ class CVS_Interface(QMainWindow):
                            ["Contains Violations:", violations],
                            ["Minimum Clearance:", min_clearance]]
             for line in export_data:
+                #out_line = line[0] + ',' + line[1]
                 writer.writerow(line)
         print("Export of Clearance Data completed.\n")
 
@@ -603,7 +724,7 @@ class CVS_Interface(QMainWindow):
                                                                                          "All Files (*)")
         if ".jpg" not in filename:
             filename += ".jpg"
-        exporter = pg.exporters.ImageExporter(self.plotter)
+        exporter = pg.exporters.ImageExporter(self.plotter.sceneObj)
         exporter.export(filename)
         print("Export of Visualized Scan completed.\n")
 

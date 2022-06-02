@@ -216,6 +216,7 @@ def sm_init():
     GPIO.setup(SM_M2, GPIO.OUT)
     GPIO.setup(HS_IN, GPIO.IN)
     GPIO.output(SM_EN, GPIO.HIGH)
+    #GPIO.output(SM_DIR, GPIO.HIGH)
     print("Stepper motor initialization complete.\n")
     
 ##### Secondary Functions #####
@@ -427,24 +428,45 @@ def SP_RAPID(unused_parameter):
     myMQTT.publish("/data/SP", "SP:1")
 
 def SP(unused_parameter):
+    # Reset fail counter
+    global timeout_counter
+    timeout_counter = 0
+    # Start Scan Procedure
+    print(f"Executing Scan now..")
     start_time = time.time()
-    # Verify Motor is Home
+    # Check if motor is enabled
+    motor_state = GPIO.input(SM_EN)
+    if motor_state == 1:
+        GPIO.output(SM_EN, GPIO.LOW)
+    print(f"Motor State: {not GPIO.input(SM_EN)}")
+    # Send motor to home position
     #HM(None)
     # Set Resolution to 0.225
     sm_set_resolution([1, 1, 0])
     current_resolution = 0.225
+    print(f"Motor Parameters: {current_resolution} deg - {[1, 1, 0]}")
     # Determine number of measurements to make
-    # current_resolution = float(sm_determine_resolution(True))
     steps = 360 / float(current_resolution)
-    # Perform Scan
-    print(f"Executing Scan: {steps} points")
+    print(f"Total steps in scan: {steps}\n")
+    # Skip Initial Dead-Zone
+    start_angle = 79.8
+    start_steps = start_angle / float(current_resolution)
+    end_angle = 78.4
+    end_steps = end_angle / float(current_resolution)
+    steps = steps - (start_steps + end_steps)
+    print(f"Initial deadzone steps: {start_steps} ({start_angle-90} deg.)")
+    for step_counter in range(0, int(start_steps)):
+        # Step motor, no measurements
+        sm_step()
+        time.sleep(0.01)
+    print(f"Deadzone skipped. Start angle: {start_angle}\n")
     for step_counter in range(0, int(steps)):
         # Capture Distance
         this_distance = tfm_capture_distance_rapid()
         # Step Motor
         sm_step()
         # Calculate Cortesian Equivalent to Vector
-        this_angle = (step_counter * current_resolution) - 90.0
+        this_angle = (step_counter * current_resolution) - 10.2
         print(f"Dist: {this_distance}")
         print(f"Angle: {this_angle}")
         this_x = this_distance * math.cos(this_angle * (math.pi / 180.0))
@@ -452,6 +474,11 @@ def SP(unused_parameter):
         # Publish to MQTT Channel
         print(f"SP:{step_counter+1}|{this_x}|{this_y}\n")
         myMQTT.publish("/data/SP", f"{this_x}|{this_y}")
+    # Skip end deadzone
+    for step_counter in range(0, int(end_steps)):
+        # Step motor, no measurements
+        sm_step()
+        time.sleep(0.005)
     end_time = time.time()
     duration = end_time - start_time
     print(f"Scan Completed.")
@@ -519,7 +546,7 @@ command_dict = {"ERLE": LE,
                 "ERSE": SE,
                 "ETHM": HM,
                 "ETSR": SR,
-                "ETSP": SP_RAPID,
+                "ETSP": SP,
                 "ETTL": TL,
                 "ETTM": TM}
 def primary_loop():

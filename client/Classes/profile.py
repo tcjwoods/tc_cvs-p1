@@ -154,3 +154,11 @@ class Profile:
         timestamp = datetime.datetime.fromtimestamp(float(self.date))
         timestamp = timestamp[0:timestamp.index(" ")]
         return timestamp
+
+    def date_string(self):
+        # Seconds since 1/1/70
+        this_date = float(self.date)
+        str_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(this_date))
+        return str_date
+
+
