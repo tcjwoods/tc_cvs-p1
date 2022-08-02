@@ -1,604 +1,490 @@
 """
-
-Clearance Verification System
-Script: main.py
-Description: The purpose of this script is to control the CVS device.  The device fields
-             commands from a client device via MQTT and captures data relevant to the
-             clearance measurement process used when performing work near tracks in which
-             it is possible for train to strike installed equipment
-
+Script Intro/Description
 """
 
-# Import all dependencies
-import os, time, math, serial, smbus, board, spidev, signal
-import gpiozero as gpio
+""" Imports """
+
+
+import os, csv, time, math, smbus, board
+import signal, spidev, pygame, pygame.camera
 import RPi.GPIO as GPIO
-import matplotlib.pyplot as plt
 import Dependencies.tfmp.tfmplus as tfmP
-from Dependencies.tfmp.tfmplus import *
+from pygame.locals import *
 import paho.mqtt.client as mqtt
-import csv
-from Dependencies.encoder import Encoder
-import signal
 
-# Tracking Variables
-timeout_counter = 0
-success_counter = 0
 
-# Pin Definitions
-MPU_SDA = 2
-MPU_SCL = 3
-SM_M0 = 13
-SM_M1 = 6
-SM_M2 = 5
-SM_STEP = 23
-SM_DIR = 24
-SM_EN = 12
-TFM_TX = 14
-TFM_RX = 15
-LAS_OUT = 18
-HS_IN = 19
+""" Variables and Objects """
 
-# Additional Constants
-tfm_addr = 0x10
-SPI_BUS = 0
-LE_CSP = 0
-mpu_addr = 0x68
 
-# Device Instances
-spi = None
-myMQTT = None
-i2cbus = None
-mySerial=None
+# Scan Data
+data_LEA = None # Float: Left Encoder Angle
+data_REA = None # Float: Right Encoder Angle
+data_SEA = None # Float: Super Elevation Angle
+data_SP = None  # List(List(Float)): Scan Points
+# Tracker Data
+track_motor_angle = None
+track_motor_resolution = None
+# Command Queue
+queue_commands = None
+# Offset Values
+offset_Scan_X = None # Scan X Offset
+offset_Scan_Y = None # Scan Y Offset
+offset_Scan_D = None # Scan Distance Offset
+offset_Scan_T = None # Scan Temp Offset
+offset_Gyro_X = None # Gyro X-Axis Offset
+offset_Gyro_Y = None # Gyro Y-Axis Offset
+offset_Gyro_Z = None # Gyro Z-Axis Offset
+offset_Gyro_T = None # Gyro Temp Offset
+offset_Encoder_A = None # Encoder Angle Offset
+# Encoder Objects
+if_spi = None
+# Gyro Objects
+if_i2c = None
+# Scanner Objects
+if_serial = None
+# Camera Objects
+cam_outside = None
+cam_inside = None
+# MQTT Objects
+if_mqtt = None
 
-# Calibration Values
-scan_offset_x = 0.00
-scan_offset_y = 0.00
-scan_offset_d = 0.00
-z_calib = 0.00
 
-# Stepper Motor Variables
-sm_CurrentAngle = 0.00
-sm_CurrentResolution = 0.00
+""" Pin Declarations, Addr/Bus Definition """
 
-# Command Queue Variables
-command_queue = []
 
-# TF-Mini Plus Variables
-dist = 0.00
-flux = 0.00
-temp = 0.00
+# Encoder Definitions
+bus_spi = 0
+pin_csp = 0
+cmd_encoder_nop = 0x00
+cmd_encoder_pos = 0x10
+cmd_encoder_zer = 0x70
+par_encoder_hz = 500000
+par_encoder_delay = 3
+# Gyro Definitions
+addr_gyro = 0x68
+pin_gyro_sda = 2
+pin_gyro_scl = 3
+# Scanner Definitions
+pin_motor_m0 = 13
+pin_motor_m1 = 6
+pin_motor_m2 = 5
+pin_motor_step = 23
+pin_motor_dir = 24
+pin_motor_enable = 12
+pin_distance_tx = 14
+pin_distance_rx = 18
+pin_homing_in = 19
+pin_laser_out = 18
 
-# SPI Encoder Commands
-AMT_NOP = 0x00
-AMT_POS = 0x10
-AMT_ZER = 0x70
-speed_hz = 500000
-delay_us = 3
 
-# Calibration Variables
-_calibration_values = None
+""" Initialization """
 
-# MQTT Parameter Variables
-_broker_address = "192.168.42.1"
-_mqtt_topics = ["command", "debug"]
 
-##### Timeout Exception Class #####
+# Primary Initialization Function
+def system_initialize():
 
-class TimeOutException(Exception):
-    pass
+    # Greet User
+    print("Clearance Verification System\n")
+    print("Beginning System Initialization..")
 
-##### MQTT Callback #####
+    # Initialize AP
+    print("Beginning AP initialization..")
+    os.system("sudo systemctl restart isc-dhcp-server.service")
+    os.system("sudo systemctl restart hostapd")
+    os.system("sudo systemctl restart mosquitto")
+    print("AP initialized.")
 
-def on_message(client, userdata, message):
-    topic = message.topic
-    payload = message.payload.decode("utf-8")
-    command_queue.append(payload)
-    
-##### Initialization Functions #####
-    
-# System Initialization
-def system_init():
-    console_init()
-    print("Beginning system initialization now..\n")
+    # Restart access point
+    print("Restarting isc-dhcp-server.service now..")
+    #os.system("sudo systemctl restart isc-dhcp-server.service")
+    print("Restarting hostapd.service now..")
+    #os.system("sudo systemctl restart hostapd")
+    print("Restarting mosquitto.service now..")
+    #os.system("sudo systemctl restart mosquitto")
+
+    # Initialize GPIO
+    print("Beginning GPIO initialization..")
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    calib_init() # Calibration
-    mqtt_init()  # MQTT Broker + Client
-    mpu_init()   # MPU-6050
-    tfm_init()   # TF-Mini Plus
-    enc_init()   # Quadrapture Encoders (2)
-    sm_init()    # Stepper Motor
-    print("System initialization complete.\n")
-    print("CVS Access Information")
-    print("AP SSID: CVS_AP")
-    print("AP PSKY: Clearance1")
-    print("System IP: 192.168.42.10\n")
+    print("GPIO Initialized.")
 
-# Console Greeting Initialization
-def console_init():
-    # Print System Information
-    print("Clearance Verification System - Version 1.0\n")
-    print("Script Name: '/home/pi/Desktop/cvs_data_manager/main.py")
-    print("Script Version: 1.0")
-    print("Last Update: n/a\n")
-
-# Calibration Initialization
-def calib_init():
-    global _calibration_values
-    print("Initializing Calibration Settings..")
-    _calibration_values = []
-    with open('/home/pi/Desktop/cvs_data_manager/Resources/calibration_values.csv') as calib_file:
-        reader = csv.reader(calib_file, delimiter=',')
+    # Initialize Calibration Values
+    print("Beginning Calibration initialization..")
+    global offset_Scan_X, offset_Scan_Y, offset_Scan_D, offset_Scan_T
+    global offset_Gyro_X, offset_Gyro_Y, offset_Gyro_Z, offset_Gyro_T
+    global offset_Encoder_A
+    offset_values = []
+    with open('/home/pi/Desktop/cvs_data_manager/Resources/calibration_values.csv') as file_calibration:
+        reader = csv.reader(file_calibration, delimiter=',')
         line = 0
         for row in reader:
             if line != 0:
                 param = row[0]
                 value = float(row[1])
-                _calibration_values.append(value)
+                offset_values.append(value)
             line += 1
-    print("Calibration Settings initialization complete.\n")
+    offset_Scan_X = offset_values[0]
+    offset_Scan_Y = offset_values[1]
+    offset_Scan_D = offset_values[2]
+    offset_Scan_T = offset_values[3]
+    offset_Gyro_X = offset_values[4]
+    offset_Gyro_Y = offset_values[5]
+    offset_Gyro_Z = offset_values[6]
+    offset_Gyro_T = offset_values[7]
+    offset_Encoder_A = offset_values[8]
+    print("Calibration Initialized.")
 
-# MQTT Broker and Client Initialization
-def mqtt_init():
-    global myMQTT
-    print("Initializing Network Services..") 
-    # Restart access point
-    print("Restarting isc-dhcp-server.service now..")
-    os.system("sudo systemctl restart isc-dhcp-server.service")
-    print("Restarting hostapd.service now..")
-    os.system("sudo systemctl restart hostapd")
-    print("Restarting mosquitto.service now..")
-    os.system("sudo systemctl restart mosquitto")
     # Initialize MQTT Broker
-    print("Restarting mosquitto.service now..")
+    print("Beginning MQTT Broker initialization..")
     os.system("sudo systemctl restart mosquitto")
-    # Initialize MQTT Client
-    myMQTT = mqtt.Client("cvs-datamanager")
-    myMQTT.connect(_broker_address)
-    print("Broker addr: ", _broker_address)
-    for topic in _mqtt_topics:
-        myMQTT.subscribe(topic)
-        print("Subscribed Topic: ", topic)
-    myMQTT.on_message = on_message    
-    print("Network Services initialization complete.\n")
+    print("MQTT Broker Initialized.")
 
-# MPU-6050 Initialization
-def mpu_init():
-    # Initialize MPU-6050
-    global i2cbus
-    print("Initializing MPU-6050..")
-    i2cbus = smbus.SMBus(1)
+    # Initialize MQTT Client
+    print("Beginning MQTT Client initialization..")
+    global if_mqtt
+    if_mqtt = mqtt.Client("cvs_device_01")
+    if_mqtt.connect("192.168.42.10")
+    if_mqtt.subscribe("/command")
+    if_mqtt.on_message = on_message
+    print("MQTT Client Initialized.")
+
+    # Initialize Gyro
+    print("Beginning Gyro initialization..")
+    global if_i2c
+    if_i2c = smbus.SMBus(1)
     time.sleep(1)
     try:
-        i2cbus.write_byte_data(mpu_addr, 0x19, 7)
-        i2cbus.write_byte_data(mpu_addr, 0x6B, 1)
-        i2cbus.write_byte_data(mpu_addr, 0x1A, 0)
-        i2cbus.write_byte_data(mpu_addr, 0x1B, 24)
-        i2cbus.write_byte_data(mpu_addr, 0x38, 1)
+        if_i2c.write_byte_data(addr_gyro, 0x19, 7)
+        if_i2c.write_byte_data(addr_gyro, 0x6B, 1)
+        if_i2c.write_byte_data(addr_gyro, 0x1A, 0)
+        if_i2c.write_byte_data(addr_gyro, 0x1B, 24)
+        if_i2c.write_byte_data(addr_gyro, 0x38, 1)
     except Exception as e:
         print("MPU-6050 initialization failed")
-        return
-    print("MPU-6050 initialization complete.\n")
+    print("Gyro Initialized.")
 
-# Rotary Encoder Initialization
-def enc_init():
-    global spi
-    print("Initializing AMT203-V Encoder..")
-    spi = spidev.SpiDev()
-    spi.open(0, 0)
-    print("AMT203-V Encoder initialization complete.\n")
-    
-# TF-Mini Plus Initialization
-def tfm_init():
-    global mySerial
-    
-    # Initialize TF-Mini Plus, Laser, SM Driver
-    print("Initializing Sensor Head..")
-    if (tfmP.begin("/dev/serial0", 115200)):
-        print("TF-Mini Plus ready.")
+    # Initialize Scanner
+    print("Beginning Scanner initialization..")
+    global if_serial
+    if not tfmP.begin("/dev/serial0", 115200):
+        print("TF-02 Initialization Failed!")
+    GPIO.setup(pin_laser_out, GPIO.OUT)
+    GPIO.setup(pin_motor_step, GPIO.OUT)
+    GPIO.setup(pin_motor_dir, GPIO.OUT)
+    GPIO.setup(pin_motor_enable, GPIO.OUT)
+    GPIO.setup(pin_motor_m0, GPIO.OUT)
+    GPIO.setup(pin_motor_m1, GPIO.OUT)
+    GPIO.setup(pin_motor_m2, GPIO.OUT)
+    GPIO.setup(pin_homing_in, GPIO.IN)
+    GPIO.output(pin_motor_enable, GPIO.HIGH)
+    GPIO.output(pin_motor_m0, GPIO.HIGH)
+    GPIO.output(pin_motor_m1, GPIO.HIGH)
+    print("Scanner Initialized.")
+
+    # Initialize Encoder
+    print("Beginning Encoder initialization..")
+    global if_spi
+    if_spi = spidev.SpiDev()
+    if_spi.open(0, 0)
+    print("Encoder Initialized.")
+
+    # Initialize Cameras
+    print("Beginning Cameras initialization..")
+    global cam_inside, cam_outside
+    pygame.init()
+    pygame.camera.init()
+    cam_list = pygame.camera.list_cameras()
+    if cam_list:
+        # TODO - Add logic to differentiate cams via MAC Addr
+        cam_inside = pygame.camera.Camera(cam_list[0], (1080, 720))
+        cam_outside = pygame.camera.Camera(cam_list[1], (1080, 720))
+    print("Cameras Initialized.")
+
+    # Initialization Completed
+    print("System initialization complete.\n")
+    print("Access Point SSID: CVS_AP (No Password)")
+    print("Device IP Address: 192.168.42.10\n")
+
+
+""" MQTT Functions """
+
+
+# MQTT On Message Callback
+def on_message(client, userdata, message):
+    topic = message.topic
+    payload = message.payload.decode("utf-8")
+    queue_commands.append(payload)
+
+
+""" Data Collection """
+
+
+# Encoder Data Capture
+def encoder_capture():
+    result = None
+    # Flush spi buffer
+    while result != [165]:
+        result = if_spi.xfer2([cmd_encoder_nop, ], par_encoder_hz)
+    # Send position command
+    result = if_spi.xfer2([cmd_encoder_pos, ], par_encoder_hz)
+    while result == [165]:
+        result = if_spi.xfer2([cmd_encoder_pos, ], par_encoder_hz)
+    if result == [16]:
+        high = if_spi.xfer2([cmd_encoder_nop, ], par_encoder_hz)[0]
+        low = if_spi.xfer2([cmd_encoder_nop, ], par_encoder_hz)[0]
+        result = high << 8 | low
+        position = result & 0x3FFF
+        angle = (position / 4096) * 360.00
+        return angle
     else:
-        print("TF-Mini Plus failed to initialize.")
-    GPIO.setup(LAS_OUT, GPIO.OUT)
-    # Set up timeout signal
-    #signal.signal(signal.SIGALRM, timeout_handler())
-    print("Sensor Head initialization complete.\n")
+        return None
 
 
-# Stepper Motor + A4988 Initialization
-def sm_init():
-    print("Initializing stepper motor and driver..")
-    GPIO.setup(SM_STEP, GPIO.OUT)
-    GPIO.setup(SM_DIR, GPIO.OUT)
-    GPIO.setup(SM_EN, GPIO.OUT)
-    GPIO.setup(SM_M0, GPIO.OUT)
-    GPIO.setup(SM_M1, GPIO.OUT)
-    GPIO.setup(SM_M2, GPIO.OUT)
-    GPIO.setup(HS_IN, GPIO.IN)
-    GPIO.output(SM_EN, GPIO.HIGH)
-    #GPIO.output(SM_DIR, GPIO.HIGH)
-    print("Stepper motor initialization complete.\n")
-    
-##### Secondary Functions #####
-    
-# Function to handle TFM Capture Timeout
-def handler(signum, frame):
-    global timeout_counter
-    timeout_counter += 1
-    print("Distance capture timed out.")
-    raise TimeOutException()
+# Gyro Data Capture
+def gyro_capture():
+    acc_x = acc_y = acc_z = 0.00
+    capture_iterations = 250
+    for count in range(0, capture_iterations):
+        # X Acceleration
+        high = if_i2c.read_byte_data(addr_gyro, 0x3B)
+        low = if_i2c.read_byte_data(addr_gyro, 0x3C)
+        value = high << 8 | low
+        if value > 32768: value -= 65536
+        acc_x += value
+        # Y Acceleration
+        high = if_i2c.read_byte_data(addr_gyro, 0x3D)
+        low = if_i2c.read_byte_data(addr_gyro, 0x3E)
+        value = high << 8 | low
+        if value > 32768: value -= 65536
+        acc_y += value
+        # Z Acceleration
+        high = if_i2c.read_byte_data(addr_gyro, 0x3F)
+        low = if_i2c.read_byte_data(addr_gyro, 0x40)
+        value = high << 8 | low
+        if value > 32768: value -= 65536
+        acc_z += value
+    # Average values to help eliminate noisy results
+    acc_x /= capture_iterations
+    acc_y /= capture_iterations
+    acc_z /= capture_iterations
+    # Convert to angles and offset by calibration values
+    angle_x = math.atan2(-acc_y, -acc_z) * (180.00 / math.pi) + offset_Gyro_X
+    angle_y = math.atan2(-acc_x, -acc_z) * (180.00 / math.pi) + offset_Gyro_Y
+    angle_z = math.atan2(-acc_y, -acc_x) * (180.00 / math.pi) + offset_Gyro_Z
+    # Shift phase to -180 to + 180
+    delta = 180 - abs(angle_z)
+    if angle_z > 0:
+        se_angle = -delta
+    else:
+        se_angle = delta
+    print(f"SEA: {se_angle}\n")
+    return se_angle
 
 
-signal.signal(signal.SIGVTALRM, handler)
+# Distance Data Capture
+def scanner_capture():
+    distance = None
+    count = 0
+    while distance is None:
+        count += 1
+        try:
+            if tfmP.getData():
+                # Successful read
+                distance = tfmP.dist / 2.52
+        except:
+            pass
+        if count >= 3:
+            distance = 0.00
+    return distance
 
 
-def hs_is_found():
-    sensor_state = GPIO.input(HS_IN)
+# Camera Image Capture
+def camera_capture(inside):
+    # Inside Camera: inside == True
+    # Outside Camera: inside == False
+    if inside == "1":
+        image_path = r'Temp/LI_temp.jpg'
+        cam_inside.start()
+        image = cam_inside.get_image()
+        pygame.image.save(image, image_path)
+        file = open(image_path, 'rb')
+        file_contents = file.read()
+        content_bytes = bytearray(file_contents)
+        if_mqtt.publish("/data/LI", content_bytes)
+        cam_inside.stop()
+    if not inside:
+        image_path = r'Temp/RI_temp.jpg'
+        cam_outside.start()
+        image = cam_outside.get_image()
+        pygame.image.save(image, image_path)
+        file = open(image_path, 'rb')
+        file_contents = file.read()
+        content_bytes = bytearray(file_contents)
+        if_mqtt.publish("/data/RI", content_bytes)
+        cam_outside.stop()
+
+
+# Homing Sensor Check
+def homing_capture():
+    sensor_state = GPIO.input(pin_homing_in)
     if sensor_state == 0:
         return True
     else:
         return False
 
 
-def enc_retrieve(as_angle):
-    # Flush SPI Buffer
+# Step Motor Once
+def motor_step():
+    GPIO.output(pin_motor_step, GPIO.HIGH)
+    time.sleep(0.005)
+    GPIO.output(pin_motor_step, GPIO.LOW)
+    time.sleep(0.005)
+
+
+# Toggle Motor
+def motor_toggle(state):
+    if state is None:
+        state = not GPIO.input(pin_motor_enable)
+    GPIO.output(pin_motor_enable, bool(state))
+
+
+# Toggle Laser
+def laser_toggle(state):
+    if state is None:
+        state = not GPIO.input(pin_laser_out)
+    GPIO.output(pin_laser_out, bool(state))
+
+
+""" Command Handlers """
+
+
+# Left Encoder
+def LE(unused_parameter):
+    angle = encoder_capture()
+    # V For 2x Res Encoder System
+    angle = ((180 - angle) / 2) + 180
+    if_mqtt.publish("/data/LE", str(angle))
+
+
+# Right Encoder
+def RE(unused_parameter):
+    angle = encoder_capture()
+    # V For 2x Res Encoder System
+    angle = (180 - angle) / 2
+    if_mqtt.publish("/data/RE", str(angle))
+
+
+# Super Elevation
+def SE(unused_parameter):
+    angle = gyro_capture()
+    if_mqtt.publish("/data/SEA", str(angle))
+
+
+# Scan Profile
+def SP(unused_parameter):
+    total_steps = 1600 # 0.225 degrees per step
+    deadzone_a = int(79.8 / 0.225)
+    deadzone_b = int((360 - 78.4) / 0.225)
+    for count in range(0, total_steps):
+        # Determine which segment of scan
+        if count < deadzone_a:
+            # Initial Deadzone
+            motor_step()
+            time.sleep(0.01)
+        elif count > deadzone_b:
+            # Final Deadzone
+            motor_step()
+            time.sleep(0.01)
+        else:
+            # Scan Zone
+            distance = scanner_capture()
+            motor_step()
+            angle = (0.225 * count) - 90
+            coordinate_x = distance * math.cos(angle * (math.pi/180))
+            coordinate_y = distance * math.sin(angle * (math.pi/180))
+            if_mqtt.publish("/data/SP", f"{coordinate_x, coordinate_y}")
+    if_mqtt.publish("/data/SP", "SP:1")
+
+
+# Capture Image
+def CI(inside):
+    if inside == "1":
+        camera_capture(True)
+    elif inside == "0":
+        camera_capture(False)
+
+
+# Home Motor
+def HM(unused_param):
+    laser_toggle(1)
+    motor_toggle(1)
+    laser_detected = homing_capture()
+    while not laser_detected:
+        motor_step()
+        time.sleep(0.01)
+
+
+# Toggle Motor
+def TM(unused_parameter):
+    motor_toggle(None)
+
+
+# Toggle Laser
+def TL(unused_parameter):
+    laser_toggle(None)
+
+
+# Calibrate Encoder
+def CE(unused_parameter):
+    # Flush SPI buffer
     result = None
     while result != [165]:
-        result = spi.xfer2([AMT_NOP, ], speed_hz)
-    # Capture Current Position
-    result = spi.xfer2([AMT_POS, ], speed_hz)
-    while result == [165]:
-        result = spi.xfer2([AMT_POS, ], speed_hz)
-    if result == [16]:
-        msb = spi.xfer2([AMT_NOP, ], speed_hz)[0]
-        lsb = spi.xfer2([AMT_NOP, ], speed_hz)[0]
-        result = msb << 8 | lsb
-        position = result & 0x3FFF
-        angle = (position / 4096.0) * 360.00
-        angle = angle - 109.3359375
-        if as_angle:
-            return angle
-        else:
-            return angle * (math.pi/180.0)
-    else:
-        return 0.00
-
-def mpu_read_raw(addr):
-    high = i2cbus.read_byte_data(mpu_addr, addr)
-    low = i2cbus.read_byte_data(mpu_addr, addr+1)
-    value = high << 8 | low
-    if (value > 32768):
-        value = value - 65536
-    return value
-
-def mpu_retrieve(axis):
-    acc_x = 0.00
-    acc_y = 0.00
-    acc_z = 0.00
-    # Average over 250 Iterations
-    total_iterations = 250
-    for value_count in range(0, total_iterations):
-        acc_x += mpu_read_raw(0x3B)
-        acc_y += mpu_read_raw(0x3D)
-        acc_z += mpu_read_raw(0x3F)
-    acc_x = acc_x / total_iterations
-    acc_y = acc_y / total_iterations
-    acc_z = acc_z / total_iterations
-    ang_x = math.atan2(-acc_y, -acc_z) * (180.00 / math.pi)
-    ang_y = math.atan2(-acc_x, -acc_z) * (180.00 / math.pi)
-    ang_z = math.atan2(-acc_y, -acc_x) * (180.00 / math.pi)
-    ang_z += z_calib
-    if ang_z > 180:
-        ang_z = - (360 - ang_z)
-    ang_z += 180.00
-    if axis == "Z":
-        return ang_z
-    else:
-        return None
-
-def sm_determine_resolution(as_angle):
-    ms0 = GPIO.input(SM_M0)
-    ms1 = GPIO.input(SM_M1)
-    ms2 = GPIO.input(SM_M2)
-    this_resolution = 0.00
-    pin_sum = ms0 + ms1 + ms2
-    if pin_sum == 0:
-        this_resolution = "1.800"
-    elif pin_sum == 2:
-        this_resolution = "0.225"
-    else:
-        if ms0 == 1:
-            this_resolution = "0.900"
-        else:
-            this_resolution = "0.450"
-    if as_angle:
-        return this_resolution
-    else:
-        return [ms0, ms1, ms2]
-    
-def tfm_capture_distance():
-    this_distance = None
-    attempt_count = 0
-    while this_distance is None:
-        attempt_count += 1
-        try:
-            #signal.setitimer(signal.ITIMER_VIRTUAL, 1.0)
-            if tfmP.getData():
-                this_distance = tfmP.dist / 2.52
-            else:
-                this_distance = None
-        except TimeOutException as e_TOE:
-            this_distance = None
-        finally:
-            pass
-            #signal.setitimer(signal.ITIMER_VIRTUAL, 0)
-        if attempt_count >= 9:
-            print("Failed to capture distance in time..")
-            return 0.00
-    return this_distance
+        result = if_spi.xfer2([cmd_encoder_nop, ], par_encoder_hz)
+    # Send reset command
+    result = if_spi.xfer2([cmd_encoder_zer, ], par_encoder_hz)
+    while result != [128]:
+        result = if_spi.xfer2([cmd_encoder_nop, ], par_encoder_hz)
 
 
-def tfm_capture_distance_rapid():
-    this_dist = None
-    attempt_counter = 0
-    signal.setitimer(signal.ITIMER_VIRTUAL, 1.0)
-    try:
-        if tfmP.getData():
-            this_dist = tfmP.dist / 2.54
-            signal.setitimer(signal.ITIMER_VIRTUAL, 0)
-        else:
-            this_dist = 0.00
-            signal.setitimer(signal.ITIMER_VIRTUAL, 0)
-    except TimeOutException as e_to:
-        this_dist = 0.00
-        signal.setitimer(signal.ITIMER_VIRTUAL, 0)
-    return this_dist
-
-
-def sm_step():
-    GPIO.output(SM_STEP, GPIO.HIGH)
-    time.sleep(0.005)
-    GPIO.output(SM_STEP, GPIO.LOW)
-    time.sleep(0.005)
-
-def sm_set_resolution(pin_combination):
-    GPIO.output(SM_M0, pin_combination[0])
-    GPIO.output(SM_M1, pin_combination[1])
-    GPIO.output(SM_M2, pin_combination[2])
-    print(f"SM RESOLUTION SET: {pin_combination}")
-    print(f"SM0: {GPIO.input(SM_M0)}")
-    print(f"SM1: {GPIO.input(SM_M1)}")
-    print(f"SM2: {GPIO.input(SM_M2)}")
-    
-def sm_set_direction(CCW):
-    GPIO.output(SM_DIR, CCW)
-    
-##### Primary Functions #####
-    
-resolution_dict = {"1.800": [0,0,0],
-                   "0.900": [1,0,0],
-                   "0.450": [0,1,0],
-                   "0.225": [1,1,0]}
-
-def LE(unused_parameter):
-    # Retrieve Current Angle Value
-    this_angle = enc_retrieve(True)
-    # Publish to MQTT Channel
-    print(f"LEA:{this_angle}\n")
-    myMQTT.publish("/data/LEA", str(this_angle))
-
-def RE(unused_parameter):
-    # Retrieve Current Angle Value
-    this_angle = enc_retrieve(True)
-    # Publish to MQTT Channel
-    print(f"REA:{this_angle}\n")
-    myMQTT.publish("/data/REA", str(this_angle))
-
-def SE(unused_parameter):
-    # Retrieve Current Angle Value
-    this_angle = mpu_retrieve("Z")
-    # Calculate SEA and SEO Values
-    this_SEA = this_angle
-    this_SEO = 56.5 * math.sin(this_SEA * (math.pi / 180.0))
-    # Publish to MQTT Channel
-    print(f"SEA:{this_SEA}")
-    print(f"SEO:{this_SEO}\n")
-    myMQTT.publish("/data/SEA", str(this_SEA))
-    myMQTT.publish("/data/SEO", str(this_SEO))
-
-def SP_RAPID(unused_parameter):
-    CYCLES = 10
-    # Rotates rapidly for 10 cycles, with very low timeout for distance
-    sm_set_resolution([1, 1, 0])
-    current_resolution = 0.225
-    steps = int((CYCLES * 360.0) / current_resolution)
-    print(f"Executing {CYCLES} scan cycles, with {steps} total steps..\n")
-    for step_counter in range(0, steps):
-        # Capture Distance
-        this_dist = tfm_capture_distance_rapid()
-        # Step Once
-        sm_step()
-        # Perform Calculations
-        this_angle = (step_counter * current_resolution) - 90.0
-        this_x = this_dist * math.cos(this_angle * (math.pi / 180.0))
-        this_y = this_dist * math.sin(this_angle * (math.pi / 180.0))
-        print(f"SP:{step_counter+1}|{this_x}|{this_y}\n")
-        myMQTT.publish("/data/SP", f"{this_x}|{this_y}")
-    print("Scan completed.\n")
-    myMQTT.publish("/data/SP", "SP:1")
-
-def SP(unused_parameter):
-    # Reset fail counter
-    global timeout_counter
-    timeout_counter = 0
-    # Start Scan Procedure
-    print(f"Executing Scan now..")
-    start_time = time.time()
-    # Check if motor is enabled
-    motor_state = GPIO.input(SM_EN)
-    if motor_state == 1:
-        GPIO.output(SM_EN, GPIO.LOW)
-    print(f"Motor State: {not GPIO.input(SM_EN)}")
-    # Send motor to home position
-    #HM(None)
-    # Set Resolution to 0.225
-    sm_set_resolution([1, 1, 0])
-    current_resolution = 0.225
-    print(f"Motor Parameters: {current_resolution} deg - {[1, 1, 0]}")
-    # Determine number of measurements to make
-    steps = 360 / float(current_resolution)
-    print(f"Total steps in scan: {steps}\n")
-    # Skip Initial Dead-Zone
-    start_angle = 79.8
-    start_steps = start_angle / float(current_resolution)
-    end_angle = 78.4
-    end_steps = end_angle / float(current_resolution)
-    steps = steps - (start_steps + end_steps)
-    print(f"Initial deadzone steps: {start_steps} ({start_angle-90} deg.)")
-    for step_counter in range(0, int(start_steps)):
-        # Step motor, no measurements
-        sm_step()
-        time.sleep(0.01)
-    print(f"Deadzone skipped. Start angle: {start_angle}\n")
-    for step_counter in range(0, int(steps)):
-        # Capture Distance
-        this_distance = tfm_capture_distance_rapid()
-        # Step Motor
-        sm_step()
-        # Calculate Cortesian Equivalent to Vector
-        this_angle = (step_counter * current_resolution) - 10.2
-        print(f"Dist: {this_distance}")
-        print(f"Angle: {this_angle}")
-        this_x = this_distance * math.cos(this_angle * (math.pi / 180.0))
-        this_y = this_distance * math.sin(this_angle * (math.pi / 180.0))
-        # Publish to MQTT Channel
-        print(f"SP:{step_counter+1}|{this_x}|{this_y}\n")
-        myMQTT.publish("/data/SP", f"{this_x}|{this_y}")
-    # Skip end deadzone
-    for step_counter in range(0, int(end_steps)):
-        # Step motor, no measurements
-        sm_step()
-        time.sleep(0.005)
-    end_time = time.time()
-    duration = end_time - start_time
-    print(f"Scan Completed.")
-    print(f"Total Points: {steps}")
-    print(f"Capture Success Rate: {(steps - timeout_counter) / steps}%")
-    print(f"Timed Out Captures: {timeout_counter}")
-    print(f"Scan Duration: {duration}")
-    print(f"Avg Time/Point: {duration/steps}\n")
-    # Re-Home Motor
-    #HM()
-    # Publish Complete Flag to MQTT Channel
-    myMQTT.publish("/data/SP", "SP:1")
-    
-def SR(resolution):
-    if resolution == "":
-        resolution = "0.225"
-    # Determine Pin States for Desired Resolution
-    pin_combination = resolution_dict[resolution]
-    # Set Pins to Desired Combination
-    sm_set_resolution(pin_combination)
-    print(f"SR:{sm_determine_resolution(False)}")
-    
-def HM(unused_parameter):
-    # Enable Laser an Motor (If not Already Enabled)
-    TL(True)
-    TM(True)
-    sm_set_direction(True)
-    # Set Resolution to Eighth Stepping
-    prior_resolution_combo = sm_determine_resolution(False)
-    new_resolution_combo = resolution_dict["0.225"]
-    sm_set_resolution(new_resolution_combo)
-    # Move Scanner until Homing Sensor is Triggered
-    exit_flag = False
-    while (exit_flag == False):
-        # Check Homing Sensor
-        if (hs_is_found()):
-            exit_flag = True
-            print("SM: Home")
-            break
-        else:
-            sm_step()
-    # Disable Laser and Motor, Reset Resolution to Orignial
-    sm_set_resolution(prior_resolution_combo)
-    TL(False)
-    TM(False)
-    
-def TL(state):
-    # Set Laser Pin output to supplied state
-    if (state == None):
-        state = GPIO.input(LAS_OUT)
-        state = not state
-    GPIO.output(LAS_OUT, state)
-    
-def TM(state):
-    # Set Motor Enable Pin output to supplied state
-    if (state == None):
-        state = GPIO.input(SM_EN)
-    GPIO.output(SM_EN, not state)
-    print(state)
-    
-##### Primary Loop #####
-    
+# Command Function Dictionary
 command_dict = {"ERLE": LE,
                 "ERRE": RE,
                 "ERSE": SE,
                 "ETHM": HM,
-                "ETSR": SR,
                 "ETSP": SP,
                 "ETTL": TL,
-                "ETTM": TM}
+                "ETTM": TM,
+                "ETCI": CI,
+                "ETCE": CE}
+
+
+""" Main Execution Loop """
+
+
 def primary_loop():
-    print("Primary data loop entered..\n")
-    exit_flag = False
-    myMQTT.loop_start()
-    while (exit_flag == False):
-        if (len(command_queue) == 0):
+    global queue_commands
+    if_mqtt.loop_start()
+    queue_commands = []
+    while True:
+        if len(queue_commands) == 0:
             # Currently no commands
             pass
-        elif (len(command_queue) > 0):
+        elif len(queue_commands) > 0:
             # Currently at least 1 command
-            this_command = command_queue[0]
-            prefix = this_command[0:4]
-            print(f"Command Received: {this_command}")
-            this_function = command_dict[prefix]
-            this_parameter = None
-            if (len(this_command) > 4):
-                this_parameter = this_command[5:]
-            this_function(this_parameter)
-            command_queue.pop(0)
-    
-##### Test Loop #####
+            command = queue_commands[0]
+            task = command[0:4]
+            print(f"CMD: {command}")
+            function = command_dict[task]
+            parameter = None
+            if len(command) > 4:
+                parameter = command[5:]
+            function(parameter)
+            queue_commands.pop(0)
 
-def test_loop():
-    # Test Motor
-    print("Setting motor to full step..")
-    sm_set_resolution([1, 1, 0])
-    GPIO.output(SM_EN, GPIO.LOW)
-    GPIO.output(LAS_OUT, GPIO.HIGH)
-    print("Complete.\n")
-    print("Now moving motor 360 degrees (200 Steps)..")
-    for step_count in range(0, 1600):
-        print(f"Step: {step_count}")
-        sm_step()
-        time.sleep(0.025)
-    print("Test of motor completed, stepped 200 times.\n")
-    GPIO.output(SM_EN, GPIO.HIGH)
-    GPIO.output(LAS_OUT, GPIO.LOW)
 
-##### Initial Function #####
-    
 if __name__ == "__main__":
-    time.sleep(4)
-    # Initialize System
-    system_init()
-    # Check "Test Mode" Flag, Enter if Applicable
-    test_flag = False
-    if test_flag:
-        test_loop()
-        while True:
-            pass
-    # Enter Primary Loop
+    system_initialize()
     primary_loop()
 
+""" Testing """
+# TODO

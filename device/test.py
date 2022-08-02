@@ -276,13 +276,67 @@ def test_tf02():
     print(f"Average Duration:\t{test_duration / (success_counter + failure_counter)} seconds.")
     print(f"Average Distance:\t{average_distance} cm.\n")
 
+def test_cameras():
+    print("Beginning test of USB cameras.\n")
+    import pygame
+    import pygame.camera
+    from pygame.locals import *
+    import matplotlib.pyplot as plt
+    import matplotlib.image as mpimg
+
+    pygame.init()
+    pygame.camera.init()
+
+    print("Attempting to find cameras.")
+    camera_list = pygame.camera.list_cameras()
+    print(camera_list)
+
+    print(f"{len(camera_list)} cameras detected.\n")
+
+    cam1 = None
+    cam2 = None
+
+    # Initialize cameras
+    print("Attempting to initialize cameras..")
+    if camera_list:
+        cam1 = pygame.camera.Camera(camera_list[0], (640, 480))
+        print(f"{camera_list[0]} initialized..")
+    if len(camera_list > 1):
+        cam2 = pygame.camera.Camer(camera_list[1], (640, 480))
+        print(f"{camera_list[1]} initialized..")
+    print()
+
+    # Capture an image
+    print("Attempting to capture and display images..")
+    for cam in camera_list:
+        if camera_list:
+            cam1.start()
+            cam1_image = cam1.get_image()
+            print("Camera 1 image captured.")
+            # Display image
+            imgplot1 = plt.imshow(cam1_image)
+            print("Camera 1 image displayed.")
+            plt.show()
+        if len(camera_list > 1):
+            cam2.start()
+            cam2_image = cam2.get_image()
+            print("Camera 2 image captured.")
+            # Display image
+            imgplot2 = plt.imshow(cam2_image)
+            print("Camera 2 image displated.")
+            plt.show()
+    print()
+
+    print("Camera testing complete.")
+    while True:
+        time.sleep(1)
+
 
 if __name__ == "__main__":
-    # Prompt User
-    print("Beginning TF-02 Test Now..\n")
-    # Enter Test Function
 
-    timeout_test_retries1(500)
+    # Start test
+    test_cameras()
+
     # Farewell
     print("All tests completed.  Exiting now..")
     sys.exit()

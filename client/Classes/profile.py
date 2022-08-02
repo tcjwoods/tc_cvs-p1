@@ -1,3 +1,4 @@
+#!usr/bin/env python
 """
 Class Intro Here..
 """
@@ -29,6 +30,10 @@ class Profile:
         self.envelope = None
         # Calculation Parameters
         self.inside = True
+        self.a_division = True
+        # Image placeholders
+        self.im_inside = None
+        self.im_outside = None
 
     def brAvailable(self):
         if self.LEA is None:
@@ -51,7 +56,7 @@ class Profile:
                 w = z - x
                 w /= y - x
                 c = (x - y) * (w - abs(w) ** 2) / 2j / w.imag - x
-                return abs(c + x) / 12.0
+                return [abs(c + x) / 12.0, None]
             else:
                 # !!!!!!!!NEED TO CONFIRM!!!!!!!!!
                 lx = 600 * math.cos(self.LEA * (pi / 180.0))
@@ -63,27 +68,43 @@ class Profile:
                 l_slope_perp = -1 / l_slope
                 lcy = l_slope_perp * (0 - (lx / 2)) + (ly / 2)
                 lcx = 0
-                lbr = math.sqrt(lcx ** 2 + lcy ** 2)
+                lbr = math.sqrt(lcx ** 2 + lcy ** 2) / 12.0
                 # Right Radius
                 r_slope = (ry / rx)
                 r_slope_perp = -1 / r_slope
                 rcy = r_slope_perp * (0 - (rx / 2)) + (ry / 2)
                 rcx = 0
-                rbr = math.sqrt(rcx ** 2 + rcy ** 2)
-                return min(lbr, rbr)
+                rbr = math.sqrt(rcx ** 2 + rcy ** 2) / 12.0
+                return [lbr, rbr]
                 # !!!!!!!!!!NEED TO CONFIRM!!!!!!!!!!!!!
         else:
             return None
 
     def centerExcess(self):
         if self.brAvailable():
-            return ((12 * (50 ** 2)) / 8) / self.bendRadius()
+            br = self.bendRadius()
+            if None in br:
+                br = br[0]
+            else:
+                br = min(br)
+            if self.a_division:
+                return 1944 / br
+            else:
+                return 4374 / br
         else:
             return 0.00
 
     def endExcess(self):
         if self.brAvailable():
-            return 2945 / self.bendRadius()
+            br = self.bendRadius()
+            if None in br:
+                br = br[0]
+            else:
+                br = min(br)
+            if self.a_division:
+                return 1512 / br
+            else:
+                return 2945 / br
         else:
             return 0.00
 
@@ -108,19 +129,21 @@ class Profile:
     def generate_insert_query(self, table):
         if self.date is None:
             self.date = time.time()
-        query_parameters = (self.date, self.line, self.track, self.stationing,
+        query_parameters = (self.date, self.line, self.track, self.stationing, int(self.inside), int(self.a_division),
                             self.LEA, self.REA, self.bendRadius(), self.centerExcess(), self.endExcess(),
-                            self.SEA, self.scan_string())
-        this_query = f"INSERT INTO {table} (DATE, LINE, TRACK, STATIONING, LEA, REA, BR, CE, EE, SEA, SP) " \
-                     f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+                            self.SEA, self.scan_string(), self.im_inside, self.im_outside)
+        this_query = f"INSERT INTO {table} (DATE, LINE, TRACK, STATIONING, INSIDE, A_DIVISION, LEA, REA, BR, CE," \
+                     f" EE, SEA, SP, IM_INSIDE, IM_OUTSIDE) " \
+                     f"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         return [this_query, query_parameters]
 
     def generate_update_query(self, table):
-        query_parameters = (self.line, self.track, self.stationing,
+        query_parameters = (self.line, self.track, self.stationing, int(self.inside), int(self.a_division),
                             self.LEA, self.REA, self.bendRadius(), self.centerExcess(), self.endExcess(),
-                            self.SEA, self.scan_string(), self.date)
-        this_query = f"UPDATE {table} SET LINE=?, TRACK=?, STATIONING=?, LEA=?, REA=?, BR=?, CE=?, EE=?, SEA=?, SP=? " \
-                     f"WHERE DATE=?;"
+                            self.SEA, self.scan_string(), self.im_inside, self.im_outside, self.date)
+        this_query = f"UPDATE {table} SET LINE=?, TRACK=?, STATIONING=?, INSIDE=?, A_DIVISION=?, LEA=?, REA=?, BR=?," \
+                     f" CE=?, EE=?, SEA=?, SP=? IM_INSIDE=?, IM_OUTSIDE=?" \
+                     f" WHERE DATE=?;"
         return [this_query, query_parameters]
 
     def bulk_data_upload(self, data):
@@ -130,11 +153,15 @@ class Profile:
         self.line = data[2]
         self.track = data[3]
         self.stationing = data[4]
-        self.LEA = data[5]
-        self.REA = data[6]
-        self.SEA = data[10]
+        self.inside = bool(data[5])
+        self.a_division = bool(data[6])
+        self.LEA = data[7]
+        self.REA = data[8]
+        self.SEA = data[12]
+        self.im_inside = data[14]
+        self.im_outside = data[15]
         sp_string = ""
-        sp_string = data[11]
+        sp_string = data[13]
         if sp_string != "None":
             while sp_string != "":
                 if "," in sp_string:

@@ -1,8 +1,10 @@
 parameter,value
-pos_x,0.00
-pos_y,0.00
-mpu_x,0.00
-mpu_y,0.00
-mpu_z,0.00
-tfm_d,0.00
-dht_t,0.00
+scan_x,2.75
+scan_y,7.25
+scan_d,0.00
+scan_t,0.00
+gyro_x,0.00
+gyro_y,0.00
+gyro_z,0.13
+gyro_t,0.00
+enc_a,0.00
