@@ -159,7 +159,7 @@ class mqttClient(QtCore.QObject):
 
     @QtCore.pyqtSlot()
     def on_message(self, mqttc, obj, msg):
-        mess = msg.payload.decode("utf-8")
+        mess = str(msg.payload)
         top = msg.topic
         mstr = top + "|" + mess
         self.messageSignal.emit(msg)

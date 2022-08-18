@@ -384,7 +384,7 @@ def SE(unused_parameter):
 def SP(unused_parameter):
     total_steps = 1600 # 0.225 degrees per step
     deadzone_a = int(79.8 / 0.225)
-    deadzone_b = int((360 - 78.4) / 0.225)
+    deadzone_b = int((360 - 80.2) / 0.225)
     for count in range(0, total_steps):
         # Determine which segment of scan
         if count < deadzone_a:

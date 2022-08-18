@@ -269,7 +269,7 @@
      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
     </property>
    </widget>
-   <widget class="QPushButton" name="btnScan_2">
+   <widget class="QPushButton" name="btnImage">
     <property name="geometry">
      <rect>
       <x>10</x>
@@ -343,8 +343,40 @@
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actNew"/>
+    <addaction name="actSave"/>
+    <addaction name="separator"/>
+    <addaction name="actReport"/>
+    <addaction name="separator"/>
+    <addaction name="actExit"/>
+   </widget>
+   <addaction name="menuFile"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actNew">
+   <property name="text">
+    <string>Create New</string>
+   </property>
+  </action>
+  <action name="actReport">
+   <property name="text">
+    <string>Export Clearance Report</string>
+   </property>
+  </action>
+  <action name="actSave">
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actExit">
+   <property name="text">
+    <string>Exit</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>

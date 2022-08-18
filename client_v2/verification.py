@@ -3,15 +3,22 @@
 """
 
 # Python Packages
+import base64
 import csv
 import os
 import sqlite3
 import subprocess
 import sys
 import time
-from PyQt5 import QtWidgets, uic, QtCore
+import cv2
+import fillpdf.fillpdfs
+from PyQt5 import QtWidgets, uic, QtCore, QtGui
+from PyQt5.QtCore import *
 import pyqtgraph as pg
+import pyqtgraph.exporters
 # Custom Classes
+from PyQt5.QtGui import QCloseEvent
+
 from locationProfile import LocationProfile
 from mqtt import mqttClient as mqtt
 
@@ -32,9 +39,14 @@ class Verification(QtWidgets.QMainWindow):
         self.btnScan.clicked.connect(self.scan)
         self.btnNewProfile.clicked.connect(self.new_profile)
         self.btnSaveProfile.clicked.connect(self.save_profile)
+        self.btnImage.clicked.connect(self.capture_images)
+        self.actNew.triggered.connect(self.new_profile)
+        self.actSave.triggered.connect(self.save_profile)
+        self.actReport.triggered.connect(self.generate_clearance_report)
+        self.actExit.triggered.connect(sys.exit)
 
         # Initialize Visualizer
-        self.visualizer = pg.plot()
+        self.visualizer = pg.PlotWidget()
         self.imv = pg.ImageView()
         self.visualizer.showGrid(x=True, y=True)
         self.visualizer.setXRange(-200, 200)
@@ -57,6 +69,8 @@ class Verification(QtWidgets.QMainWindow):
         self.plotter_layout = QtWidgets.QVBoxLayout()
         self.plotter_layout.addWidget(self.visualizer)
         self.frmVisualizer.setLayout(self.plotter_layout)
+
+        self.point_clicked = pg.SignalProxy(self.visualizer.sceneObj.sigMouseClicked, slot=self.get_mouse_coordinates)
 
         # Parse passed parameters
         passed_parameters = optional_parameters.split(",")  # [Line, Track, Stationing, Date]
@@ -102,12 +116,14 @@ class Verification(QtWidgets.QMainWindow):
             self.mqtt = mqtt(self)
             self.mqtt.stateChanged.connect(self.mqtt_state_changed)
             self.mqtt.messageSignal.connect(self.mqtt_message_received)
-            self.mqtt.hostname = "localhost"  # "192.168.42.10"
+            self.mqtt.hostname = "192.168.42.10"
             self.mqtt.connectToHost()
             self.mqtt.subscribe("/data/LE")     # Left Encoder
             self.mqtt.subscribe("/data/RE")     # Right Encoder
             self.mqtt.subscribe("/data/SE")     # Super Elevation
             self.mqtt.subscribe("/data/SP")     # Scan Points
+            self.mqtt.subscribe("/data/LI")     # Inside Image
+            self.mqtt.subscribe("/data/RI")     # Outside Image
         except Exception as e:
             # No AP Connection or Failed MQTT Connection
             QtWidgets.QMessageBox.information(self, "CVS_AP Not Detected!", "Connection to the device cannot be "
@@ -117,6 +133,23 @@ class Verification(QtWidgets.QMainWindow):
 
         # Update display to show data
         self.update_display()
+
+    # Window Action Functions
+
+    def closeEvent(self, QCloseEvent):
+        # Check if need to save
+        if self.current_profile.changes_made:
+            response = QtWidgets.QMessageBox.information(self, "Save Before Exit?", "Changes have been made to current"
+                                                                                    " profile. Would you like to save?",
+                                                         QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                                                         QtWidgets.QMessageBox.No)
+            if response == QtWidgets.QMessageBox.Yes:
+                self.save_profile()
+                QtWidgets.QMessageBox.information(self, "Profile Saved!", "Profile has been saved. Close this window to"
+                                                                          " exit now!")
+            else:
+                QtWidgets.QMessageBox.information(self, "Profile Not Saved!", "Profile has not been saved. Close this "
+                                                                              "window to exit now!")
 
     # MQTT Functions
 
@@ -133,7 +166,10 @@ class Verification(QtWidgets.QMainWindow):
 
     def mqtt_message_received(self, message):
         message_topic = message.topic
-        message_payload = message.payload.decode('utf-8')
+        if not message_topic == "/data/LI" and not message_topic == "/data/RI":
+            message_payload = message.payload.decode('utf-8')
+        else:
+            message_payload = message.payload
         # Call appropriate function
         if message_topic == "/data/LE":
             self.LEA(message_payload)
@@ -143,14 +179,33 @@ class Verification(QtWidgets.QMainWindow):
             self.SE(message_payload)
         elif message_topic == "/data/SP":
             self.SP(message_payload)
+        elif message_topic == "/data/LI":
+            self.IM(message_payload, 1)  # Inside Image
+        elif message_topic == "/data/RI":
+            self.IM(message_payload, 2)  # Outside Image
 
     # Control Functions
+
+    def capture_images(self):
+        # Verify MQTT Connection -
+        self.mqtt.publish("/command", "ETCI")
 
     def super_elevation(self):
         # Verify MQTT Connection
         if self.mqtt.m_state == self.mqtt.Connected:
-            # Send command
-            self.mqtt.publish("/command", "ERSE")
+            response = QtWidgets.QMessageBox.information(self,
+                                                         "Check Proper Orientation",
+                                                         "Please ensure that the device is in the proper orientation."
+                                                         " The BR Mechanism should be on the rail that is on the "
+                                                         "outside of the curve.",
+                                                         QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+                                                         QtWidgets.QMessageBox.Cancel)
+            if response == QtWidgets.QMessageBox.Ok:
+                # Send command
+                self.mqtt.publish("/command", "ERSE")
+            else:
+                QtWidgets.QMessageBox.information(self, "Task Aborted",
+                                                  "Task has been aborted, RE value not collected.")
         else:
             # Alert to disconnect
             QtWidgets.QMessageBox.information(self, "Connection Error", "You are not connected to the device, so the "
@@ -158,7 +213,7 @@ class Verification(QtWidgets.QMainWindow):
                                                                         "connection.")
         # Wait for response and update data display
         time.sleep(1)
-        self.update_display()
+        #self.update_display()
 
     def bend_radius(self):
         # Verify MQTT Connection
@@ -241,8 +296,8 @@ class Verification(QtWidgets.QMainWindow):
             track_shoe_length = "50"
         response = QtWidgets.QMessageBox.information(self, "Capture LE",
                                           f"Ensure that the {track_shoe_length}' track shoe is attached to the track"
-                                          f"to the left of the device. Also ensure that the string is tight with no"
-                                          f"sag in the line. Click OK once ready to capture LE value.",
+                                          f" to the left of the device. Also ensure that the string is tight with no"
+                                          f" sag in the line. Click OK once ready to capture LE value.",
                                           QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
                                           QtWidgets.QMessageBox.Ok)
         if response == QtWidgets.QMessageBox.Ok:
@@ -255,8 +310,8 @@ class Verification(QtWidgets.QMainWindow):
         # Right Encoder Value
         response = QtWidgets.QMessageBox.information(self, "Capture RE",
                                           f"Ensure that the {track_shoe_length}' track shoe is attached to the track"
-                                          f"to the right of the device. Also ensure that the string is tight with no"
-                                          f"sag in the line. Click OK once ready to capture RE value.",
+                                          f" to the right of the device. Also ensure that the string is tight with no"
+                                          f" sag in the line. Click OK once ready to capture RE value.",
                                           QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
                                           QtWidgets.QMessageBox.Ok)
         if response == QtWidgets.QMessageBox.Ok:
@@ -267,13 +322,27 @@ class Verification(QtWidgets.QMainWindow):
             return
 
         # Wait for responses, and update data display
-        self.update_display()
+        #self.update_display()
 
     def scan(self):
         # Verify MQTT Connection
         if self.mqtt.m_state == self.mqtt.Connected:
             # Connected, so dont exit function
-            pass
+            response = QtWidgets.QMessageBox.information(self,
+                                                         "Check Proper Orientation",
+                                                         "Please ensure that the device is in the proper orientation."
+                                                         " The BR Mechanism should be on the rail that is on the "
+                                                         "outside of the curve.",
+                                                         QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+                                                         QtWidgets.QMessageBox.Cancel)
+            if response == QtWidgets.QMessageBox.Ok:
+                # Toggle Motor On
+                self.mqtt.publish("/command", "ETTM:1")
+                time.sleep(1)
+                # Execute Scan
+                self.mqtt.publish("/command", "ETSP")
+                QtWidgets.QMessageBox.information(self, "Scan Started", "The scan has been started. Once complete you will"
+                                                                        " be notified.")
         else:
             # Alert to disconnect
             QtWidgets.QMessageBox.information(self, "Connection Error", "You are not connected to the device, so the "
@@ -281,13 +350,7 @@ class Verification(QtWidgets.QMainWindow):
                                                                         "connection.")
             return
 
-        # Ensure Motor is On
-        self.mqtt.publish("/command" "ETTM:1")
 
-        # Execute Scan
-        self.mqtt.publish("/command", "ETSP")
-        QtWidgets.QMessageBox.information(self, "Scan Started", "The scan has been started. Once complete you will"
-                                                                "be notified.")
 
     # Response Functions
 
@@ -345,14 +408,37 @@ class Verification(QtWidgets.QMainWindow):
         # Catch "Scan Complete" Flag
         if value == "SP:1":
             self.update_display()
+            QtWidgets.QMessageBox.information(self, "Scan Completed", f"The scan has been completed. "
+                                                                      f"{len(self.current_profile.scan_points)} scan"
+                                                                      f" points were collected.")
+            #self.mqtt.publish("/command", "ETCI:0")  # Inside Camera
+            #time.sleep(1)
+            #self.mqtt.publish("/command", "ETCI:1")  # Outside Camera
+            self.update_display()
+            return
         # Scrape value and cast to coordinates to floats
-        x = float(value[0:value.index(",")])
-        y = float(value[value.index(",")+1:])
+        x = float(value[1:value.index(",")])
+        y = float(value[value.index(",")+1:-1])
+        # Check if in deadzone
+        if (x < 60 and x > -60 and y > 0 and y < 10):
+            return  #  - Make sure this works and catches below device deadzone
         # Append point to sp list of current profile
         self.current_profile.append_scan_point([x, y])
         # Check if 5*n th value, and update display
         if len(self.current_profile.scan_points) % 5 == 0:
             self.update_display()
+
+    def IM(self, image_data, location):
+        if location == 1:   # Inside Image
+            image_file = open(r'temp/temp_image_inside.png', 'wb')
+            image_file.write(image_data)
+            self.current_profile.update_image(image_data, 'i')
+            image_file.close()
+        elif location == 2: # Outside Image
+            image_file = open(r'temp/temp_image_outside.png', 'wb')
+            image_file.write(image_data)
+            self.current_profile.update_image(image_data, 'o')
+            image_file.close()
 
     # Profile Management Functions
 
@@ -368,8 +454,6 @@ class Verification(QtWidgets.QMainWindow):
                 self.save_profile()
                 QtWidgets.QMessageBox.information(self, "Changes Saved", "All changes were successfully saved!")
 
-        # Create new Profile - TODO
-        pass
 
     def save_profile(self):
         # Check if profile exists in database
@@ -397,11 +481,8 @@ class Verification(QtWidgets.QMainWindow):
         this_type = None
 
         this_line = input_dialog.getText(self, f'Line/Location', "Enter Line/Location of New Profile:")
-        # TODO - Check this_line validity
         this_track = input_dialog.getText(self, f"Track", "Enter Track of New Profile (## or N/a):")
-        # TODO - Check this_track validity
         this_stationing = input_dialog.getText(self, f"Stationing", "Enter Stationing of New Profile (####+## or N/a):")
-        # TODO - Check this_stationing validity
         this_date = time.strftime("")
 
         return [this_line, this_track, this_stationing, ]
@@ -450,6 +531,10 @@ class Verification(QtWidgets.QMainWindow):
                 min_horizontal_clearance = point[0]
             if min_vertical_clearance > point[1]:
                 min_vertical_clearance = point[1]
+        if min_horizontal_clearance == sys.float_info.max:
+            min_horizontal_clearance = "N/a"
+        if min_vertical_clearance == sys.float_info.max:
+            min_vertical_clearance = "N/a"
         self.plot_violation.setData(x=violation_x, y=violation_y)
         self.txtHorizontalClearance.setText(str(min_horizontal_clearance))
         self.txtVerticalClearance.setText(str(min_vertical_clearance))
@@ -491,3 +576,125 @@ class Verification(QtWidgets.QMainWindow):
             elif self.current_profile.location_of_interest == 1:
                 # Inside of Curve
                 self.txtExcess.setText(f'{self.current_profile.excess[0][0]:.2f}" (CE)')
+
+    # Report Related Functions
+
+    def generate_clearance_report(self):
+        # Retreive template and data fields
+        template_file = r'data/report.pdf'
+        report_dict = fillpdf.fillpdfs.get_form_fields(template_file)
+
+        # Retreive Images
+        image_plot = f'temp/temp_image_plot_{str(time.time())}.jpg'
+        plot_exporter = pg.exporters.ImageExporter(self.visualizer.sceneObj)
+        plot_exporter.export(image_plot)
+        image_inside = open(r'temp/temp_image_inside.png')
+        image_outside = open(r'temp/temp_image_outside.png')
+
+        # Retreive Data
+        location = None
+        excess = None
+        if self.current_profile.location_of_interest == 1:
+            location = "Inside of Curve"
+            center_excess = f"{self.current_profile.excess[0][0]:.2f} in. (CE)"
+            end_excess = f"{self.current_profile.excess[0][1]:.2f} in. (EE)"
+            bend_radius = self.current_profile.bend_radius[0]
+        elif self.current_profile.location_of_interest == 2:
+            location = "Outside of Curve"
+            center_excess = f"{min(self.current_profile.excess[0][0], self.current_profile.excess[1][0]):.2f} in."
+            end_excess = f"{max(self.current_profile.excess[0][1], self.current_profile.excess[1][1]):.2f} in."
+            bend_radius = min(self.current_profile.bend_radius[0], self.current_profile.bend_radius[1])
+        min_h = 999999.99
+        min_v = 999999.99
+        for p in self.current_profile.calculate_clearances():
+            if p[2]:
+                min_h = 0.00
+                min_v = 0.00
+                break
+            else:
+                if min_h > p[0]:
+                    min_h = p[0]
+                if min_v > p[1]:
+                    min_v = p[1]
+        report_dict = {
+            'frmLine': self.current_profile.line,
+            'frmTrack': self.current_profile.track,
+            'frmStationing': self.current_profile.stationing,
+            'frmEquipment': self.current_profile.equipment,
+            'frmDate': time.strftime('%m/%d/%Y %H:%M', time.localtime(int(float(self.current_profile.date)))),
+            'frmPerformed': "",  #  Add this field to creation of scan
+            'frmInside': location,
+            'frmSuper': f"{self.current_profile.super_elevation:.2f} deg.",
+            'frmBend': f"{bend_radius:.0f} ft.",
+            'frmCenter': center_excess,
+            'frmEnd': end_excess,
+            'frmClearance': f"Horiz:{min_h:.1f}, Vert:{min_v} in."
+        }
+
+        # Generate PDF
+        out_path, check = QtWidgets.QFileDialog.getSaveFileName(None, "Save Report As..", "",
+                                                                "PDF Files (*.pdf);;All Files (*)")
+        if ".pdf" not in out_path:
+            out_path += '.pdf'
+        temp_file_a = out_path[0:-4] + "_temp_a.pdf"
+        temp_file_b = out_path[0:-4] + "_temp_b.pdf"
+        temp_file_c = out_path[0:-4] + "_temp_c.pdf"
+        fillpdf.fillpdfs.write_fillable_pdf(template_file, temp_file_a, report_dict, flatten=False)
+        fillpdf.fillpdfs.place_image(image_plot, 93, 250, temp_file_a, temp_file_b, 1, width=400, height=190)    # Plot
+        fillpdf.fillpdfs.place_image(image_inside, 110, 450, temp_file_b, temp_file_c, 1, width=200, height=120)  # In
+        fillpdf.fillpdfs.place_image(image_outside, 285, 450, temp_file_c, out_path, 1, width=200, height=120) # Out
+
+        # Clean Up Temp Files
+        try:
+            os.remove(f"{os.getcwd()}/{image_plot}")
+            os.remove(temp_file_a)
+            os.remove(temp_file_b)
+            os.remove(temp_file_c)
+            image_inside.close()
+            image_outside.close()
+        except:
+            pass
+        print("Export Completed.")
+        QtWidgets.QMessageBox.information(self, "Export Complete!", f"Export of the Clearance Report is complete.\n"
+                                                                    f"File: {out_path}")
+
+    # !!TESTING!!
+    def get_mouse_coordinates(self, event):
+        # Get Coordinates of Clicked Point
+        coordinates = event[0]
+        point = coordinates.pos()
+        x = point.x()
+        y = point.y()
+
+        # Find SP of Clicked Point
+        clearances = self.current_profile.calculate_clearances()
+        min_x = 999999.9
+        min_y = 999999.9
+        current_x = None
+        current_y = None
+        for point in clearances:
+            delta_x = abs(point[3] - x)
+            delta_y = abs(point[4] - y)
+            if delta_x < min_x and delta_y < min_y:
+                min_x = delta_x
+                min_y = delta_y
+                current_x = point[3]
+                current_y = point[4]
+        for point in clearances:
+            if point[3] == current_x and point[4] == current_y:
+                h_clearance = point[0]
+                v_clearance = point[1]
+                violation = point[2]
+                if violation:
+                    QtWidgets.QMessageBox.information(self,
+                                                      "Point Clearance",
+                                                      f"This point is within the envelope."
+                                                      f" There is {h_clearance} in. of horizontal clearance and "
+                                                      f"{v_clearance} in. of vertical clearance.")
+                    return
+                else:
+                    QtWidgets.QMessageBox.information(self,
+                                                      "Point Clearance",
+                                                      f"This point has {h_clearance} in. of horizontal clearance and "
+                                                      f"{v_clearance} in. of vertical clearance.")
+                    return

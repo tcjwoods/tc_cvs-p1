@@ -39,7 +39,7 @@ class LocationProfile:
         self.orientation_direction = None           # 1 = North, 2 = South
         self.division = None                        # 1 = Division A, 2 = Division B
         self.scan_points = []                       # [ [X,Y], .. ]
-        self.images = []                            # [ IM_Left, IM_Right ]
+        self.images = [None, None]                  # [ IM_Left, IM_Right ]
 
         # Envelope Storage
         self.base_envelope = []                     # [ [ID, X, Y, DIV], ... ]
@@ -84,6 +84,13 @@ class LocationProfile:
         Y = value[1]
         # Append to List
         self.scan_points.append([X, Y])
+        self.changes_made = True
+
+    def update_image(self, image_data, side):
+        if side == 'i':
+            self.images[0] = image_data
+        elif side == 'o':
+            self.images[1] = image_data
         self.changes_made = True
 
     def calculate_bend_radius(self):
@@ -217,6 +224,14 @@ class LocationProfile:
                 y = float(coordinates[1])
                 self.scan_points.append([x, y])
         self.images = [parameter_list[15], parameter_list[16]]
+        if self.images[0] is not None:
+            inside_image = open('temp/temp_image_inside.png', 'wb')
+            inside_image.write(self.images[0])
+            inside_image.close()
+        if self.images[1] is not None:
+            outside_image = open('temp/temp_image_outside.png', 'wb')
+            outside_image.write(self.images[1])
+            outside_image.close()
         self.calculate_bend_radius()
 
     def calculate_clearances(self):
