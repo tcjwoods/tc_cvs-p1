@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>929</width>
-    <height>544</height>
+    <width>1800</width>
+    <height>1200</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,11 +17,18 @@
    <widget class="QPushButton" name="btnSuperElevation">
     <property name="geometry">
      <rect>
-      <x>10</x>
+      <x>850</x>
       <y>10</y>
       <width>291</width>
-      <height>41</height>
+      <height>201</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Determine Super Elevation</string>
@@ -30,11 +37,18 @@
    <widget class="QPushButton" name="btnBendRadius">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>60</y>
-      <width>291</width>
-      <height>41</height>
+      <x>520</x>
+      <y>10</y>
+      <width>301</width>
+      <height>201</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Determine Bend Radius</string>
@@ -43,11 +57,18 @@
    <widget class="QPushButton" name="btnScan">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>110</y>
+      <x>1170</x>
+      <y>10</y>
       <width>291</width>
-      <height>41</height>
+      <height>201</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Capture 2D Scan</string>
@@ -56,11 +77,18 @@
    <widget class="QPushButton" name="btnSaveProfile">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>280</y>
-      <width>291</width>
-      <height>41</height>
+      <x>20</x>
+      <y>150</y>
+      <width>481</width>
+      <height>131</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Save Current Profile</string>
@@ -69,11 +97,18 @@
    <widget class="QPushButton" name="btnNewProfile">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>230</y>
-      <width>291</width>
-      <height>41</height>
+      <x>20</x>
+      <y>10</y>
+      <width>481</width>
+      <height>131</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Create New Profile</string>
@@ -83,10 +118,15 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>370</y>
-      <width>91</width>
-      <height>20</height>
+      <y>500</y>
+      <width>151</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Bend Radius:</string>
@@ -98,11 +138,16 @@
    <widget class="QLabel" name="lblSuperElevation">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>340</y>
-      <width>121</width>
-      <height>20</height>
+      <x>20</x>
+      <y>460</y>
+      <width>151</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Super Elevation:</string>
@@ -115,10 +160,15 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>400</y>
-      <width>91</width>
-      <height>20</height>
+      <y>540</y>
+      <width>151</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Excess:</string>
@@ -130,11 +180,16 @@
    <widget class="QLabel" name="txtSuperElevation">
     <property name="geometry">
      <rect>
-      <x>150</x>
-      <y>340</y>
+      <x>190</x>
+      <y>460</y>
       <width>161</width>
-      <height>21</height>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>[1.23* Away]</string>
@@ -143,11 +198,16 @@
    <widget class="QLabel" name="txtBendRadius">
     <property name="geometry">
      <rect>
-      <x>120</x>
-      <y>370</y>
+      <x>190</x>
+      <y>500</y>
       <width>191</width>
-      <height>21</height>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>[123.45 Ft.]</string>
@@ -156,11 +216,16 @@
    <widget class="QLabel" name="txtExcess">
     <property name="geometry">
      <rect>
-      <x>120</x>
-      <y>400</y>
+      <x>190</x>
+      <y>540</y>
       <width>191</width>
-      <height>21</height>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>[12.34 In. (Center)]</string>
@@ -170,10 +235,15 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>440</y>
-      <width>121</width>
-      <height>20</height>
+      <y>620</y>
+      <width>151</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Horiz. Clearance:</string>
@@ -186,10 +256,15 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>470</y>
-      <width>121</width>
-      <height>20</height>
+      <y>660</y>
+      <width>151</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Vert. Clearance:</string>
@@ -201,11 +276,16 @@
    <widget class="QLabel" name="txtHorizontalClearance">
     <property name="geometry">
      <rect>
-      <x>150</x>
-      <y>440</y>
+      <x>190</x>
+      <y>620</y>
       <width>161</width>
-      <height>21</height>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>[+123.45 In.]</string>
@@ -214,11 +294,16 @@
    <widget class="QLabel" name="txtVerticalClearance">
     <property name="geometry">
      <rect>
-      <x>150</x>
-      <y>470</y>
+      <x>190</x>
+      <y>660</y>
       <width>161</width>
-      <height>21</height>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>[+123.45 In.]</string>
@@ -227,10 +312,10 @@
    <widget class="QFrame" name="frmVisualizer">
     <property name="geometry">
      <rect>
-      <x>320</x>
-      <y>10</y>
-      <width>591</width>
-      <height>431</height>
+      <x>520</x>
+      <y>220</y>
+      <width>1271</width>
+      <height>841</height>
      </rect>
     </property>
     <property name="frameShape">
@@ -243,11 +328,16 @@
    <widget class="QLabel" name="label">
     <property name="geometry">
      <rect>
-      <x>330</x>
-      <y>450</y>
-      <width>141</width>
-      <height>17</height>
+      <x>520</x>
+      <y>1070</y>
+      <width>171</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>&lt;- Outside of Curve</string>
@@ -256,11 +346,16 @@
    <widget class="QLabel" name="label_2">
     <property name="geometry">
      <rect>
-      <x>760</x>
-      <y>450</y>
-      <width>141</width>
-      <height>17</height>
+      <x>1630</x>
+      <y>1070</y>
+      <width>161</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Inside of Curve -&gt;</string>
@@ -272,11 +367,18 @@
    <widget class="QPushButton" name="btnImage">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>160</y>
-      <width>291</width>
-      <height>41</height>
+      <x>1490</x>
+      <y>10</y>
+      <width>301</width>
+      <height>201</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>75</weight>
+      <bold>true</bold>
+     </font>
     </property>
     <property name="text">
      <string>Capture Images</string>
@@ -288,14 +390,22 @@
     </property>
     <property name="geometry">
      <rect>
-      <x>330</x>
-      <y>470</y>
-      <width>141</width>
-      <height>17</height>
+      <x>520</x>
+      <y>1110</y>
+      <width>171</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Equipment Side</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignCenter</set>
     </property>
    </widget>
    <widget class="QLabel" name="txtEquipmentInside">
@@ -304,11 +414,16 @@
     </property>
     <property name="geometry">
      <rect>
-      <x>760</x>
-      <y>470</y>
-      <width>141</width>
-      <height>17</height>
+      <x>1630</x>
+      <y>1110</y>
+      <width>161</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>Equipment Side</string>
@@ -320,11 +435,16 @@
    <widget class="QLabel" name="txtMQTTStatus">
     <property name="geometry">
      <rect>
-      <x>486</x>
-      <y>470</y>
-      <width>261</width>
-      <height>16</height>
+      <x>700</x>
+      <y>1070</y>
+      <width>931</width>
+      <height>31</height>
      </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
     </property>
     <property name="text">
      <string>MQTT Connection Lost</string>
@@ -333,17 +453,144 @@
      <set>Qt::AlignCenter</set>
     </property>
    </widget>
+   <widget class="QLabel" name="lblExcess_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>390</y>
+      <width>151</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Stationing</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="lblBendRadius_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>350</y>
+      <width>151</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Track:</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="lblSuperElevation_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>310</y>
+      <width>151</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>Line:</string>
+    </property>
+    <property name="alignment">
+     <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+    </property>
+   </widget>
+   <widget class="QLabel" name="txtTrack">
+    <property name="geometry">
+     <rect>
+      <x>190</x>
+      <y>350</y>
+      <width>191</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>[123.45 Ft.]</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="txtLine">
+    <property name="geometry">
+     <rect>
+      <x>190</x>
+      <y>310</y>
+      <width>161</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>[1.23* Away]</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="txtStationing">
+    <property name="geometry">
+     <rect>
+      <x>190</x>
+      <y>390</y>
+      <width>191</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
+    <property name="text">
+     <string>[12.34 In. (Center)]</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>929</width>
-     <height>22</height>
+     <width>1800</width>
+     <height>27</height>
     </rect>
    </property>
+   <property name="font">
+    <font>
+     <pointsize>14</pointsize>
+    </font>
+   </property>
    <widget class="QMenu" name="menuFile">
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+     </font>
+    </property>
     <property name="title">
      <string>File</string>
     </property>
@@ -360,6 +607,11 @@
   <action name="actNew">
    <property name="text">
     <string>Create New</string>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>14</pointsize>
+    </font>
    </property>
   </action>
   <action name="actReport">

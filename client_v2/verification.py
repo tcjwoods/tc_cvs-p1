@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import math
 import cv2
 import fillpdf.fillpdfs
 from PyQt5 import QtWidgets, uic, QtCore, QtGui
@@ -225,7 +226,7 @@ class Verification(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Connection Error", "You are not connected to the device, so the "
                                                                         "command cannot be sent. Please check device "
                                                                         "connection.")
-            return
+            #return
         # Proper Orientation of Device Pop-Up
         response = QtWidgets.QMessageBox.information(self,
                                                      "Check Proper Orientation",
@@ -288,6 +289,23 @@ class Verification(QtWidgets.QMainWindow):
         else:
             QtWidgets.QMessageBox.information(self, "Task Aborted", "Task has been aborted, no data collected.")
             return
+
+        # Check Tangent vs Curved Track
+        collection_items = ("Curved Track", "Tangent Track")
+        item, result = QtWidgets.QInputDialog.getItem(self, "Track Curvature", "Is the track tangent or curved?",
+                                                      collection_items, 0, False)
+        if result and item:
+            if item == "Tangent Track":
+                QtWidgets.QMessageBox.information(self, "Tangent Track", "Bend radius will be assumed to be infinite "
+                                                                         "and center/end excess will be assumed "
+                                                                         "to be zero. Bend radius measurement "
+                                                                         "is not necessary.")
+                self.current_profile.update_left_encoder(180.0)
+                self.current_profile.update_right_encoder(0.0)
+                self.update_display()
+                return
+
+
 
         # Left Encoder Value
         if self.current_profile.location_of_interest == 1:
@@ -549,9 +567,9 @@ class Verification(QtWidgets.QMainWindow):
                 lean = 1
             loi = self.current_profile.location_of_interest
             if lean == loi:
-                lean = "towards"
-            elif not lean == loi:
                 lean = "away"
+            elif not lean == loi:
+                lean = "towards"
             if self.current_profile.super_elevation is None:
                 self.txtSuperElevation.setText(f"Not Collected")
             else:

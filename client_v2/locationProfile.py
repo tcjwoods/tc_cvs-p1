@@ -100,8 +100,8 @@ class LocationProfile:
 
         # Catch Straight Track Edge Case
         if self.left_encoder == 180.0 and self.right_encoder == 0.0:
-            self.bend_radius = math.inf
-            self.excess = [0.0, 0.0]    # [Center, End]
+            self.bend_radius = [math.inf, math.inf]
+            self.excess = [[0.0, 0.0], [0.0, 0.0]]    # [Center, End]
             return
 
         # Determine which calculation to use
@@ -112,12 +112,23 @@ class LocationProfile:
             rx = 25 * 12 * math.cos(self.right_encoder * DEG_TO_RAD)
             ry = 25 * 12 * math.sin(self.right_encoder * DEG_TO_RAD)
 
-            # Center Radius
-            x, y, z = complex(0,0), complex(lx, ly), complex(rx, ry)
-            w = z - x
-            w /= y - x
-            c = (x - y) * (w - abs(w) ** 2) / 2j / w.imag - x
-            self.bend_radius = [abs(c + x) / 12.0, None]
+            # Determine Slopes
+            l_slope = (ly / lx)
+            r_slope = (ry / rx)
+
+            l_slope_perp = -1 / l_slope
+            r_slope_perp = -1 / r_slope
+
+            # Find center x coordinate
+            cx = ((l_slope * r_slope) * (ly - ry) + r_slope * lx - l_slope * rx) / (2 * (r_slope - l_slope))
+
+            # Find center y coordinate
+            cy = l_slope_perp * (cx - (lx / 2)) + (ly / 2)
+
+            # Determine Bend Radius
+            bend_radius = math.sqrt(cx ** 2 + cy ** 2)
+            self.bend_radius = [bend_radius, None]
+
         elif self.location_of_interest == 2:
             # Outside of Curve Calculations
             lx = 50 * 12 * math.cos(self.left_encoder * DEG_TO_RAD)
@@ -139,8 +150,10 @@ class LocationProfile:
             rcx = 0
             rbr = math.sqrt(rcx ** 2 + rcy ** 2) / 12.0
             self.bend_radius = [lbr, rbr]
+
         else:
             return
+
         # Update the excesses
         self.calculate_excess()
 
@@ -200,7 +213,7 @@ class LocationProfile:
                 x = float(point[1])
                 y = float(point[2])
                 vector_radius = math.sqrt(x**2 + y**2)
-                vector_angle = (math.atan2(y, x) * RAD_TO_DEG) + super_elevation
+                vector_angle = (math.atan2(y, x) * RAD_TO_DEG) - super_elevation
                 adjusted_x = vector_radius * math.cos(vector_angle * DEG_TO_RAD) + excess
                 adjusted_y = vector_radius * math.sin(vector_angle * DEG_TO_RAD)
                 self.active_envelope.append([adjusted_x, adjusted_y])

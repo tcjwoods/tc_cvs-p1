@@ -291,6 +291,8 @@ def scanner_capture():
             if tfmP.getData():
                 # Successful read
                 distance = tfmP.dist / 2.52
+                # Linear Calibration
+                distance += 0.00630984 * distance + 0.549164
         except:
             pass
         if count >= 3:
