@@ -48,12 +48,10 @@ class Controller:
 
     def show_verification(self, profile_identifiers):
         self.verification = Verification(profile_identifiers)
-        self.menu.close()
         self.verification.show()
 
     def show_installation(self, profile_identifiers):
         self.installation = Installation(profile_identifiers)
-        self.menu.close()
         self.installation.show()
 
     def show_calibration(self):

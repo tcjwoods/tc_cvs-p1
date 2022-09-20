@@ -19,6 +19,7 @@ import pyqtgraph as pg
 import pyqtgraph.exporters
 # Custom Classes
 from PyQt5.QtGui import QCloseEvent
+#from main import Controller
 
 from locationProfile import LocationProfile
 from mqtt import mqttClient as mqtt
@@ -28,6 +29,9 @@ verification_interface_file = r'interface/verification.ui'
 # Clearance Verification Class
 
 class Verification(QtWidgets.QMainWindow):
+
+    switch_verification = QtCore.pyqtSignal(str)
+    switch_installation = QtCore.pyqtSignal(str)
 
     def __init__(self, optional_parameters):
         super(Verification, self).__init__()
@@ -151,6 +155,7 @@ class Verification(QtWidgets.QMainWindow):
             else:
                 QtWidgets.QMessageBox.information(self, "Profile Not Saved!", "Profile has not been saved. Close this "
                                                                               "window to exit now!")
+        self.close()
 
     # MQTT Functions
 
@@ -384,9 +389,9 @@ class Verification(QtWidgets.QMainWindow):
             lean = 1
         loi = self.current_profile.location_of_interest
         if lean == loi:
-            lean = "towards"
-        elif not lean == loi:
             lean = "away"
+        elif not lean == loi:
+            lean = "towards"
         # Assign value to current profile
         self.current_profile.update_super_elevation(calculated_value)
         # Notify User of Values
@@ -594,6 +599,11 @@ class Verification(QtWidgets.QMainWindow):
             elif self.current_profile.location_of_interest == 1:
                 # Inside of Curve
                 self.txtExcess.setText(f'{self.current_profile.excess[0][0]:.2f}" (CE)')
+
+        # Update Scan Information
+        self.txtLine.setText(self.current_profile.line)
+        self.txtTrack.setText(self.current_profile.track)
+        self.txtStationing.setText(self.current_profile.stationing)
 
     # Report Related Functions
 
